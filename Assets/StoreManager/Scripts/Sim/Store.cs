@@ -22,6 +22,11 @@ namespace StoreManager
         public bool ExpansionPending;
         public float Reputation = 50f;
 
+        // Progression
+        public int Level = 1;
+        public int XP;
+        readonly HashSet<LicenceDef> owned = new HashSet<LicenceDef>();
+
         public readonly List<Category> Categories = new List<Category>();
         public readonly List<Product> Products = new List<Product>();
         readonly Dictionary<ProductDef, Product> productOf = new Dictionary<ProductDef, Product>();
@@ -57,9 +62,13 @@ namespace StoreManager
         };
 
         public int Expansions { get { return SlotCount - Layout.StartSlots; } }
-        public int BackCapacity { get { return 9000 + 2000 * Expansions; } }
-        public float Rent { get { return 700f + 300f * Expansions; } }
-        public float ExpansionCost { get { return 15000f * (Expansions + 1); } }
+        public int BackCapacity { get { return 5000 + 2000 * Expansions; } }
+        public float Rent { get { return 350f + 175f * Expansions; } }
+        public float ExpansionCost { get { return 8000f + 6000f * Expansions; } }
+        public int ExpansionLevel
+        {
+            get { return Expansions < Catalog.ExpansionLevels.Length ? Catalog.ExpansionLevels[Expansions] : 99; }
+        }
         public Vector2Int StaffEntrance { get { return new Vector2Int(Grid.W - 4, Layout.DockRow); } }
         public Vector2Int DeskSeat { get { return new Vector2Int(3, 30); } }
 
@@ -76,7 +85,7 @@ namespace StoreManager
 
         public float TrafficFactor
         {
-            get { return (0.4f + Reputation / 100f * 1.2f) * (0.55f + 0.75f * Variety); }
+            get { return (0.4f + Reputation / 100f * 1.2f) * (0.35f + 1.0f * Variety); }
         }
 
         public float ExpectedCustomersPerDay
@@ -114,6 +123,9 @@ namespace StoreManager
                 }
             }
 
+            for (int i = 0; i < Catalog.Licences.Count; i++)
+                if (Catalog.Licences[i].Level <= 1 && Catalog.Licences[i].Cost <= 0f) owned.Add(Catalog.Licences[i]);
+
             Builder.BuildAll();
             Staff.RefreshApplicants(true);
             Staff.HireStartingStaff();
@@ -126,8 +138,9 @@ namespace StoreManager
             Clock.NewDay += OnNewDay;
             Economy.Today.Day = Clock.Day;
             Economy.PayRent(Rent);
-            Message("Your store is empty. Place checkouts and shelves, pick what goes on each shelf, then order stock.");
-            Message("Time is paused. Press 1-4 or the speed buttons when you're ready to open.");
+            Message("Your corner shop is empty. You have a Basic Groceries licence: pasta, canned soup, soft drinks and snacks.");
+            Message("Place a checkout and some shelves, pick what goes on each shelf, then order stock (express gets it here today).");
+            Message("Time is paused. Press 1-4 or the speed buttons when you're ready to open. Sales earn XP; levels unlock licences.");
         }
 
         void Start()
@@ -192,6 +205,23 @@ namespace StoreManager
         {
             int par = Mathf.CeilToInt(ExpectedDaily(p) * ParDays / p.CaseSize) * p.CaseSize;
             return Mathf.Max(par, p.CaseSize * 2);
+        }
+
+        /// <summary>Par that covers about two days of this store's demand, given what it currently sells.</summary>
+        public int SuggestedPar(Product p)
+        {
+            float carried = 0f;
+            for (int i = 0; i < Products.Count; i++) if (Products[i].Carried || Products[i] == p) carried += Products[i].Def.Demand;
+            float share = 0.8f * p.Def.Demand / Mathf.Max(0.01f, carried) + 0.2f * p.Def.Demand / Catalog.TotalDemand;
+            float daily = ExpectedCustomersPerDay * 6.5f * 1.3f * share;
+            int cs = p.Def.CaseSize;
+            return Mathf.Max(cs * 2, Mathf.CeilToInt(daily * ParDays / cs) * cs);
+        }
+
+        public void SuggestAllPars()
+        {
+            for (int i = 0; i < Products.Count; i++)
+                if (Products[i].Carried && !Products[i].Baked) Products[i].Par = SuggestedPar(Products[i]);
         }
 
         public Product ProductOf(ProductDef def)
@@ -323,6 +353,88 @@ namespace StoreManager
             if (Economy.Cash < 0f) Message("Warning: the store is in the red.");
         }
 
+        // ------------------------------------------------------------------ licences and levels
+
+        public bool Owns(LicenceDef l) { return l == null || owned.Contains(l); }
+        public bool IsLicensed(ProductDef p) { return Owns(p.Licence); }
+        public int XpThisLevel { get { return Catalog.LevelXp[Level - 1]; } }
+        public int XpNextLevel { get { return Level < Catalog.MaxLevel ? Catalog.LevelXp[Level] : XP; } }
+
+        /// <summary>Why a licence can't be bought right now, or null if it can.</summary>
+        public string LicenceLock(LicenceDef l)
+        {
+            if (Owns(l)) return "Owned";
+            if (Level < l.Level) return "Needs level " + l.Level;
+            if (l.Requires != null && !Owns(l.Requires)) return "Needs " + l.Requires.Name;
+            if (Economy.Cash < l.Cost) return "Costs " + Economy.Money(l.Cost);
+            return null;
+        }
+
+        public bool BuyLicence(LicenceDef l)
+        {
+            if (LicenceLock(l) != null) return false;
+            Economy.PayConstruction(l.Cost);
+            owned.Add(l);
+            string what = "";
+            for (int i = 0; i < l.Products.Count; i++) what += (i > 0 ? ", " : "") + l.Products[i].Name;
+            Message("Licence bought: " + l.Name + ". You can now sell " + what + ".");
+            return true;
+        }
+
+        public string FixtureLock(FixtureDef f)
+        {
+            var l = Catalog.LicenceForFixture(f.Id);
+            return Owns(l) ? null : "Needs the " + l.Name + " licence";
+        }
+
+        public string RoleLock(Role r)
+        {
+            int lvl = Catalog.RoleLevel(r);
+            if (Level < lvl) return "Needs level " + lvl;
+            var l = Catalog.LicenceForRole(r);
+            if (l != null && !Owns(l)) return "Needs the " + l.Name + " licence";
+            return null;
+        }
+
+        public void AddXP(int amount)
+        {
+            if (amount <= 0) return;
+            XP += amount;
+            while (Level < Catalog.MaxLevel && XP >= Catalog.LevelXp[Level])
+            {
+                Level++;
+                var news = new List<string>();
+                for (int i = 0; i < Catalog.Licences.Count; i++)
+                    if (Catalog.Licences[i].Level == Level) news.Add(Catalog.Licences[i].Name);
+                for (int r = 0; r < 6; r++)
+                    if (Catalog.RoleLevel((Role)r) == Level) news.Add("hiring " + Catalog.RoleName((Role)r) + "s");
+                if (ExpansionLevel == Level) news.Add("store expansion");
+                string text = "Store level " + Level + "!" + (news.Count > 0 ? " Unlocked: " + string.Join(", ", news.ToArray()) + "." : "");
+                if (Hud.I != null) Hud.Toast(text); else Message(text);
+            }
+        }
+
+        /// <summary>What a customer wants: mostly things the store sells, sometimes anything at all.</summary>
+        public ProductDef PickWantedProduct()
+        {
+            if (Random.value < 0.8f)
+            {
+                float total = 0f;
+                for (int i = 0; i < Products.Count; i++) if (Products[i].Carried) total += Products[i].Def.Demand;
+                if (total > 0f)
+                {
+                    float r = Random.value * total;
+                    for (int i = 0; i < Products.Count; i++)
+                    {
+                        if (!Products[i].Carried) continue;
+                        r -= Products[i].Def.Demand;
+                        if (r <= 0f) return Products[i].Def;
+                    }
+                }
+            }
+            return Catalog.RandomProduct();
+        }
+
         // ------------------------------------------------------------------ fixtures
 
         public Fixture FixtureAt(Vector2Int t)
@@ -346,6 +458,8 @@ namespace StoreManager
 
         public string CanPlace(FixtureDef def, Vector2Int origin, int rot)
         {
+            string locked = FixtureLock(def);
+            if (locked != null) return locked + ".";
             if (Economy.Cash < def.Cost) return "Not enough cash (" + Economy.Money(def.Cost) + ").";
             return Placement.Validate(this, def, origin, rot, null);
         }
@@ -430,6 +544,7 @@ namespace StoreManager
         {
             if (!f.HoldsProducts) return false;
             if (def != null && def.Category.Fixture != f.Def.Id) return false;
+            if (def != null && !IsLicensed(def)) return false;
             if (f.Product != null)
             {
                 var old = f.Product;
@@ -438,7 +553,11 @@ namespace StoreManager
                 old.Fixtures.Remove(f);
             }
             f.Product = def != null ? ProductOf(def) : null;
-            if (f.Product != null) f.Product.Fixtures.Add(f);
+            if (f.Product != null)
+            {
+                if (f.Product.Fixtures.Count == 0 && !f.Product.Baked) f.Product.Par = SuggestedPar(f.Product);
+                f.Product.Fixtures.Add(f);
+            }
             if (f.ClaimedBy != null) f.ClaimedBy.Restart();
             Builder.BuildStockRows(f);
             return true;
@@ -495,7 +614,7 @@ namespace StoreManager
 
         public bool CanExpand
         {
-            get { return SlotCount < Layout.MaxSlots && !ExpansionPending && Economy.Cash >= ExpansionCost; }
+            get { return SlotCount < Layout.MaxSlots && !ExpansionPending && Level >= ExpansionLevel && Economy.Cash >= ExpansionCost; }
         }
 
         public void Expand()
@@ -503,7 +622,7 @@ namespace StoreManager
             if (!CanExpand) return;
             Economy.PayConstruction(ExpansionCost);
             ExpansionPending = true;
-            Message("Expansion ordered: 12 m more floor space and a bigger back room. Ready at 06:00.");
+            Message("Expansion ordered: 12 m more shop floor and a bigger back room. Ready at 06:00.");
         }
 
         void CompleteConstruction()
@@ -578,16 +697,48 @@ namespace StoreManager
         void Deliver(bool express)
         {
             if (express) expressTimer = -1f;
-            int space = BackCapacity - BackStockTotal;
+            int space = Mathf.Max(0, BackCapacity - BackStockTotal);
             float cost = 0f;
-            int units = 0, refused = 0;
+            int units = 0, refused = 0, ordered = 0;
+            for (int i = 0; i < Products.Count; i++) ordered += Mathf.Max(0, Products[i].OnOrder);
+
+            // Not enough room: everything gets a fair share (whole cases), then spare room goes to what's lowest.
+            var take = new int[Products.Count];
+            float ratio = ordered > space ? (float)space / ordered : 1f;
+            int left = space;
             for (int i = 0; i < Products.Count; i++)
             {
                 var p = Products[i];
                 if (p.OnOrder <= 0) continue;
-                int q = Mathf.Min(p.OnOrder, Mathf.Max(0, space));
+                int cs = p.Def.CaseSize;
+                take[i] = ratio >= 1f ? p.OnOrder : Mathf.FloorToInt(p.OnOrder * ratio / cs) * cs;
+                left -= take[i];
+            }
+            if (ratio < 1f)
+            {
+                var order = new List<int>();
+                for (int i = 0; i < Products.Count; i++) if (Products[i].OnOrder > take[i]) order.Add(i);
+                order.Sort((a, b) => ((float)Products[a].OnHand / Mathf.Max(1, Products[a].Par)).CompareTo((float)Products[b].OnHand / Mathf.Max(1, Products[b].Par)));
+                bool gave = true;
+                while (gave && left > 0)
+                {
+                    gave = false;
+                    for (int k = 0; k < order.Count; k++)
+                    {
+                        int i = order[k], cs = Products[i].Def.CaseSize;
+                        if (take[i] + cs > Products[i].OnOrder || cs > left) continue;
+                        take[i] += cs;
+                        left -= cs;
+                        gave = true;
+                    }
+                }
+            }
+            for (int i = 0; i < Products.Count; i++)
+            {
+                var p = Products[i];
+                if (p.OnOrder <= 0) continue;
+                int q = take[i];
                 p.Back.Add(q, p.Life);
-                space -= q;
                 units += q;
                 cost += q * p.Def.Cost;
                 refused += p.OnOrder - q;

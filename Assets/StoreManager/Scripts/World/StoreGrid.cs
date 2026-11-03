@@ -22,7 +22,7 @@ namespace StoreManager
         public const int DockRow = 35;
         public const int OfficeEndX = 7;
         public const int OfficeWallX = 8;
-        public const int StartSlots = 4;
+        public const int StartSlots = 2;
         public const int MaxSlots = 7;
 
         public static int Width(int slots) { return slots * SlotWidth; }

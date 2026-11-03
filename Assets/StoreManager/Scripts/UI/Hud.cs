@@ -38,7 +38,7 @@ namespace StoreManager
         public GUIStyle Header { get { return header; } }
         public GUIStyle Rich { get { return rich; } }
 
-        static readonly string[] Tabs = { "Overview", "Build", "Products", "Staff", "Hire", "Delegation", "Expansion", "Finances" };
+        static readonly string[] Tabs = { "Overview", "Build", "Products", "Licences", "Staff", "Hire", "Delegation", "Expansion", "Finances" };
         const int BuildTab = 1;
         static readonly string[] RoleNames = { "Cashier", "Stocker", "Cleaner", "Baker", "Deli Clerk", "Asst. Mgr" };
         static readonly string[] ShiftNames = { "Morning", "Evening", "Night" };
@@ -287,6 +287,13 @@ namespace StoreManager
                 Label3D(cam, SelectedCustomer.transform.position + new Vector3(0f, 2.5f, 0f), "<color=#9fe3ff>" + SelectedCustomer.DisplayName + "</color>", 200f);
         }
 
+        string LevelText()
+        {
+            if (store.Level >= Catalog.MaxLevel) return "Level " + store.Level + " (max)";
+            int have = store.XP - store.XpThisLevel, need = store.XpNextLevel - store.XpThisLevel;
+            return "Level " + store.Level + "  <size=12>" + have + "/" + need + " xp</size>";
+        }
+
         void DrawTopBar(float sw)
         {
             var clk = store.Clock;
@@ -298,6 +305,7 @@ namespace StoreManager
             GUILayout.Label("Cash " + Money(store.Economy.Cash), bold, W(140));
             int rep = Mathf.RoundToInt(store.Reputation);
             GUILayout.Label("Reputation " + rep + "  " + new string('*', Mathf.Clamp(rep / 20 + 1, 1, 5)), bold, W(170));
+            GUILayout.Label(LevelText(), bold, W(190));
             GUILayout.Label("Sales today " + Money(store.Economy.Today.Sales), W(150));
             GUILayout.Label("In store " + store.Customers.Count, W(90));
             GUILayout.FlexibleSpace();
@@ -468,10 +476,11 @@ namespace StoreManager
             {
                 case 0: OverviewTab(); break;
                 case 2: ProductsTab(); break;
-                case 3: StaffTab(); break;
-                case 4: HireTab(); break;
-                case 5: DelegationTab(); break;
-                case 6: ExpansionTab(); break;
+                case 3: LicencesTab(); break;
+                case 4: StaffTab(); break;
+                case 5: HireTab(); break;
+                case 6: DelegationTab(); break;
+                case 7: ExpansionTab(); break;
                 default: FinancesTab(); break;
             }
             GUILayout.EndScrollView();
@@ -542,12 +551,17 @@ namespace StoreManager
         void ProductsTab()
         {
             GUILayout.Label("Products", header);
-            GUILayout.Label("Choose products by clicking shelves in Build. Par = how much you want on hand (shelves + back + ordered). Orders arrive with the 06:00 truck, or within an hour by express (+25%).", small);
+            GUILayout.Label("Choose products by clicking shelves in Build. Buy licences to sell more. Par = how much you want on hand (shelves + back + ordered). Orders arrive with the 06:00 truck, or within an hour by express (+25%).", small);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Order everything to par", W(200)))
             {
                 int n = store.OrderAllToPar(0f);
                 Toast(n > 0 ? "Ordered " + n + " products up to par." : "Everything on sale is at par.");
+            }
+            if (GUILayout.Button("Suggest pars", W(110)))
+            {
+                store.SuggestAllPars();
+                Toast("Pars set to about two days of sales for your current range.");
             }
             GUI.enabled = store.OnOrderTotal > 0 && !store.ExpressPending;
             if (GUILayout.Button(store.ExpressPending ? "Express on its way" : "Express delivery now (+25%)", W(220)))
@@ -561,6 +575,9 @@ namespace StoreManager
             for (int c = 0; c < store.Categories.Count; c++)
             {
                 var cat = store.Categories[c];
+                bool anyLicensed = false;
+                for (int i = 0; i < cat.Products.Count; i++) if (store.IsLicensed(cat.Products[i].Def)) anyLicensed = true;
+                if (!anyLicensed) continue;
                 GUILayout.BeginVertical("box");
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(cat.Name, header, W(160));
@@ -587,6 +604,11 @@ namespace StoreManager
                 {
                     var p = cat.Products[i];
                     int cs = p.Def.CaseSize;
+                    if (!store.IsLicensed(p.Def))
+                    {
+                        GUILayout.Label("<color=#777777>" + p.Name + "   (" + p.Def.Licence.Name + " licence, level " + p.Def.Licence.Level + ")</color>", rich);
+                        continue;
+                    }
                     GUILayout.BeginHorizontal();
                     GUILayout.Label(p.Carried ? p.Name : "<color=#999999>" + p.Name + "</color>", rich, W(110));
                     GUILayout.Label(p.Fixtures.Count.ToString(), W(60));
@@ -622,6 +644,39 @@ namespace StoreManager
                     GUILayout.EndHorizontal();
                 }
                 GUILayout.EndVertical();
+            }
+        }
+
+        void LicencesTab()
+        {
+            GUILayout.Label("Licences", header);
+            GUILayout.Label("Level " + store.Level + ". Every sale earns XP; bigger baskets earn more. Higher levels let you buy more licences. "
+                + "Department licences unlock a new kind of fixture as well as its first products.", small);
+            GUILayout.Space(4f);
+            for (int i = 0; i < Catalog.Licences.Count; i++)
+            {
+                var l = Catalog.Licences[i];
+                bool owned = store.Owns(l);
+                string why = store.LicenceLock(l);
+                bool levelOk = store.Level >= l.Level;
+                GUILayout.BeginHorizontal("box");
+                string name = (l.Department ? "<b>" + l.Name + "</b>  <size=11><color=#9fd3ff>DEPARTMENT</color></size>" : l.Name);
+                GUILayout.Label(levelOk || owned ? name : "<color=#888888>" + name + "</color>", rich, W(260));
+                GUILayout.Label("Lv " + l.Level, W(44));
+                var unlocks = new List<string>();
+                for (int k = 0; k < l.Products.Count; k++) unlocks.Add(l.Products[k].Name);
+                for (int k = 0; k < l.Fixtures.Count; k++) unlocks.Add("<color=#9fd3ff>" + Catalog.FixtureById(l.Fixtures[k]).Name + "</color>");
+                for (int k = 0; k < l.Roles.Count; k++) unlocks.Add("<color=#ffd9a0>" + Catalog.RoleName(l.Roles[k]) + "s</color>");
+                GUILayout.Label(string.Join(", ", unlocks.ToArray()), small, W(380));
+                if (owned) GUILayout.Label("<color=#9dff9d>Owned</color>", rich, W(150));
+                else if (why == null || why.StartsWith("Costs"))
+                {
+                    GUI.enabled = why == null;
+                    if (GUILayout.Button("Buy " + Money(l.Cost), W(150))) store.BuyLicence(l);
+                    GUI.enabled = true;
+                }
+                else GUILayout.Label("<color=#ff9977>" + why + "</color>", rich, W(150));
+                GUILayout.EndHorizontal();
             }
         }
 
@@ -672,6 +727,7 @@ namespace StoreManager
             {
                 r = (Role)(((int)r + 1) % 6);
                 if (r == Role.AssistantManager && am != null && am != e) continue;
+                if (store.RoleLock(r) != null) continue;
                 return r;
             }
             return e.Role;
@@ -702,7 +758,9 @@ namespace StoreManager
             hireShift = GUILayout.Toolbar(hireShift, ShiftNames, W(330));
             GUILayout.EndHorizontal();
             bool amTaken = (Role)hireRole == Role.AssistantManager && staff.Assistant != null;
-            if (amTaken) GUILayout.Label("<color=#ffcc55>You already have an assistant manager.</color>", rich);
+            string roleLock = store.RoleLock((Role)hireRole);
+            if (roleLock != null) GUILayout.Label("<color=#ff9977>Can't hire " + RoleNames[hireRole] + "s yet: " + roleLock.ToLower() + ".</color>", rich);
+            else if (amTaken) GUILayout.Label("<color=#ffcc55>You already have an assistant manager.</color>", rich);
             GUILayout.Label("Leadership only matters for an assistant manager. Bakers work fast with Baking, deli clerks with Butchery. Night shift pays 25% more.", small);
             GUILayout.Space(6f);
 
@@ -715,7 +773,7 @@ namespace StoreManager
                 GUILayout.Label("Speed " + a.Speed + "  Service " + a.Service + "  Reliability " + a.Reliability + "  Leadership " + a.Leadership, small, W(330));
                 GUILayout.Label(a.Specialty != Specialty.None ? "[" + a.Specialty + "]" : "", small, W(80));
                 GUILayout.Label("$" + a.AskingWage.ToString("0") + "/h", W(60));
-                GUI.enabled = !amTaken;
+                GUI.enabled = !amTaken && roleLock == null;
                 if (GUILayout.Button("Hire", W(70)))
                 {
                     var e = staff.Hire(a, (Role)hireRole, (Shift)hireShift, null);
@@ -734,7 +792,9 @@ namespace StoreManager
             if (am == null)
             {
                 GUILayout.Label("You have no assistant manager.", header);
-                GUILayout.Label("Hire one in the Hire tab (pick Asst. Mgr), or change someone's role in the Staff tab. Leadership decides how well they do.", rich);
+                string amLock = store.RoleLock(Role.AssistantManager);
+                if (amLock != null) GUILayout.Label("<color=#ff9977>Assistant managers unlock at level " + Catalog.RoleLevel(Role.AssistantManager) + ".</color>", rich);
+                else GUILayout.Label("Hire one in the Hire tab (pick Asst. Mgr), or change someone's role in the Staff tab. Leadership decides how well they do.", rich);
             }
             else
             {
@@ -763,7 +823,9 @@ namespace StoreManager
                 GUILayout.Label("The store can't get any bigger.", rich);
             else
             {
-                GUILayout.Label("Next expansion: +12 m of shop floor, +2,000 back-room units, rent +$300/day.", rich);
+                GUILayout.Label("Next expansion: +12 m of shop floor, +2,000 back-room units, rent +" + Money(175f) + "/day.", rich);
+                if (store.Level < store.ExpansionLevel)
+                    GUILayout.Label("<color=#ff9977>Needs store level " + store.ExpansionLevel + " (you are level " + store.Level + ").</color>", rich);
                 GUI.enabled = store.CanExpand;
                 if (GUILayout.Button("Expand for " + Money(store.ExpansionCost), W(240), GUILayout.Height(34f)))
                     store.Expand();

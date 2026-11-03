@@ -17,8 +17,9 @@ manager and grow the store.
    all the tools, but nobody on the floor sees you.
 4. **Delegation.** The assistant manager takes routine work off your hands.
    They are only as good as their skills, and only there on their shift.
-5. **Grow one store.** Buy more floor space, add departments, add checkouts,
-   get a bigger back room.
+5. **Grow one store, gradually.** Start as a small corner shop with a few
+   basic groceries. Sales earn XP; store levels and money unlock licences for
+   new products and departments, new staff roles and bigger premises.
 
 ## Platform and presentation
 
@@ -48,12 +49,47 @@ manager and grow the store.
 - The camera detaches: **WASD** pans over the whole store, Q/E rotate, wheel
   zooms.
 - All management screens are here, and only here: Overview, Build, Products,
-  Staff, Hire, Delegation, Expansion, Finances.
+  Licences, Staff, Hire, Delegation, Expansion, Finances.
 - Press **Tab** again to get up and walk the floor.
+
+## Progression: levels and licences
+
+- Every customer who pays earns **XP** (2 + 1 per $5 in their basket). XP
+  raises the **store level** (1–12); the top bar shows level and progress.
+- **Licences** (Licences tab) unlock what you may sell. Each needs a store
+  level and costs money; some need another licence first.
+- **Department licences** unlock a new fixture type plus its first products
+  (and a staff role where needed). Later licences add more products to it.
+- You start with **Basic Groceries** (pasta, canned soup, soft drinks,
+  snacks): gondola shelves and checkouts only.
+
+| Licence | Level | Cost | Unlocks |
+|---|---|---|---|
+| Basic Groceries | 1 | free | Pasta, Canned Soup, Soft Drinks, Snacks; shelves, checkouts |
+| Pantry Staples | 2 | $1,200 | Rice, Cereal |
+| Produce Department | 2 | $2,500 | Produce tables; Apples, Bananas, Potatoes |
+| Coffee | 3 | $1,500 | Coffee |
+| Dairy Department | 3 | $4,000 | Fridges; Milk, Eggs, Yogurt |
+| Salad Vegetables | 4 | $1,800 | Tomatoes, Lettuce (needs Produce) |
+| Household Department | 4 | $2,500 | Toilet Paper, Dish Soap |
+| Frozen Food | 5 | $3,500 | Frozen Pizza, Ice Cream (needs Dairy) |
+| Cheese | 5 | $1,500 | Cheese (needs Dairy) |
+| Bakery Department | 6 | $8,000 | Oven, bakery shelves, bakers; Bread, Croissants |
+| Cleaning & Batteries | 6 | $2,000 | Detergent, Batteries (needs Household) |
+| Deli Department | 7 | $12,000 | Deli counters, deli clerks; Sliced Ham, Chicken |
+| Cakes | 8 | $3,000 | Cakes (needs Bakery) |
+| Deli Salads | 9 | $3,000 | Salads (needs Deli) |
+| Butcher's Cuts | 10 | $6,000 | Steak (needs Deli) |
+
+- **Levels also gate:** cleaners (level 2), the assistant manager (level 3),
+  and each **expansion** (levels 3, 5, 7, 9, 11).
+- Customers mostly want what you sell, but some ask for things you don't
+  ("Asked for but not sold here" on the Overview): a hint for what to license
+  next.
 
 ## Building the store
 
-The game starts with an **empty store**: walls, entrance, office, back room
+The game starts with an **empty corner shop** (24 m wide): walls, entrance, office, back room
 and loading dock. Time is paused until you start it. Everything on the shop
 floor is placed by you, from the **office desk** (Build tab):
 
@@ -78,8 +114,9 @@ floor is placed by you, from the **office desk** (Build tab):
 - Fixtures can be **moved** (keeps its product and stock) or **sold** for 50%.
 - Customers go to the fixtures holding what's on their list. Products with no
   shelf count as "things you don't sell".
-- **Expansion** adds 12 m of shop floor and more back-room space (finished at
-  06:00 the next morning).
+- **Expansion** adds 12 m of shop floor and 2,000 units of back room
+  (finished at 06:00 the next morning). Needs the store level, costs $8,000
+  + $6,000 per earlier expansion; rent goes up $175/day each time.
 
 ## Products and prices
 
@@ -90,8 +127,9 @@ floor is placed by you, from the **office desk** (Build tab):
   more profit per item but fewer customers buy, and satisfaction drops.
 - Stock lives on the fixtures and in the **back room**. Stockers move it from
   the back to the emptiest shelves. Perishables age each night and expire.
-- **Par level** per product = how much to keep on hand. "Order to par" orders
-  the difference. Orders come with the 06:00 truck, or by **express** within
+- **Par level** per product = how much to keep on hand. A new product starts
+  at about two days of expected sales ("Suggest pars" recalculates all of
+  them). "Order to par" orders the difference. Orders come with the 06:00 truck, or by **express** within
   an hour for 25% more (handy for opening day).
 
 ## Staff
@@ -140,12 +178,15 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 ## Economy
 
 - Cash, daily ledger: sales, wholesale, wages, rent, construction, waste.
-- **Orders** arrive by truck at 06:00 and are paid on delivery. Back room has a
-  capacity limit.
+- **Orders** arrive by truck at 06:00 and are paid on delivery. The back room
+  holds 5,000 units (+2,000 per expansion); if a delivery doesn't fit, every
+  product gets a fair share and the rest is refused (not paid for).
 - Rent is charged every midnight and grows with expansion.
-- Start with $60,000. A sensible opening store (3 checkouts, ~12 shelves,
-  produce and fridges) plus opening stock costs about $45k and makes roughly
-  $3,000 a day (headless simulation). Never ordering empties the shelves fast.
+- Start with $20,000, a cashier for each shift and a morning stocker. Rent
+  $350/day. A starter shop (2 checkouts, 6 shelves) plus express opening stock
+  costs about $9k. In the headless auto-player run, sales grow from ~$3k a day
+  to ~$13k a day by day 30, with level 12 around day 30–35 and the big
+  departments (bakery, deli) bought as money allows.
 
 ## Time
 
@@ -157,8 +198,8 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 ## Roadmap
 
 1. **First slice (this build):** build mode with free placement, one product
-   per shelf, staff roles and shifts, assistant manager, customers, orders,
-   express delivery, expansion, office/floor.
+   per shelf, licences and store levels, staff roles and shifts, assistant
+   manager, customers, orders, express delivery, expansion, office/floor.
 2. Staff breaks, break room, overtime, part-timers, weekly schedule screen.
 3. Suppliers with different prices and lead times; promotions and sales.
 4. Decor and signs you can place; drag-to-place rows of shelves.

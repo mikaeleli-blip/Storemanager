@@ -59,7 +59,7 @@ namespace StoreManager
             int count = Random.Range(3, 11);
             for (int i = 0; i < count; i++)
             {
-                var p = Catalog.RandomProduct();
+                var p = Store.I.PickWantedProduct();
                 int qty = Random.value < 0.3f ? 2 : 1;
                 Want existing = null;
                 for (int k = 0; k < wants.Count; k++) if (wants[k].Def == p) existing = wants[k];
@@ -368,6 +368,7 @@ namespace StoreManager
             if (Paid) return;
             Paid = true;
             Store.I.Economy.Sale(CartValue, Items);
+            Store.I.AddXP(2 + Mathf.FloorToInt(CartValue / 5f));
             foreach (var kv in categoryValue) kv.Key.SalesToday += kv.Value;
             if (cashier != null)
             {

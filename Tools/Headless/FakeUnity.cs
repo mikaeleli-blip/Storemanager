@@ -559,6 +559,7 @@ namespace UnityEngine
         public static void BeginArea(Rect r) { }
         public static void EndArea() { }
         public static void BeginHorizontal(params GUILayoutOption[] o) { }
+        public static void BeginHorizontal(GUIStyle s, params GUILayoutOption[] o) { }
         public static void EndHorizontal() { }
         public static void BeginVertical(GUIStyle s, params GUILayoutOption[] o) { }
         public static void EndVertical() { }

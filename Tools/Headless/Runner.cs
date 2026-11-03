@@ -58,104 +58,143 @@ public static class Runner
         var def = Catalog.FixtureById(id);
         var o = new Vector2Int(x, z);
         string why = store.CanPlace(def, o, rot);
-        if (why != null) { Console.WriteLine("   !! can't place " + id + " at " + x + "," + z + " r" + rot + ": " + why); return null; }
+        if (why != null) return null;
         var f = store.Place(def, o, rot);
         if (product != null && !store.AssignProduct(f, Catalog.ProductByName(product)))
             Console.WriteLine("   !! can't put " + product + " on " + id);
         return f;
     }
 
+    /// <summary>Finds a tidy spot: checkouts in a row by the entrance, shelves in aisles, big things at the back.</summary>
+    static Fixture PlaceAnywhere(string id, string product = null)
+    {
+        var def = Catalog.FixtureById(id);
+        int W = store.Grid.W;
+        if (id == "checkout")
+        {
+            for (int x = 4; x < W - 2; x += 3) { var f = Place(id, x, 6, 0, product); if (f != null) return f; }
+            return null;
+        }
+        if (id == "deli_counter" || id == "oven")
+        {
+            for (int x = W - 3; x >= 2; x--) { var f = Place(id, x, id == "oven" ? 23 : 23, 0, product); if (f != null) return f; }
+            for (int z = 21; z >= 13; z--)
+                for (int x = W - 3; x >= 2; x--) { var f = Place(id, x, z, 0, product); if (f != null) return f; }
+            return null;
+        }
+        for (int x = 2; x < W - 1; x += 3)
+            for (int z = 13; z <= 21; z += 2) { var f = Place(id, x, z, 0, product); if (f != null) return f; }
+        return null;
+    }
+
+    static float Reserve { get { return 2500f + 120f * store.Staff.All.Count; } }
+
     static void BuildStarterStore()
     {
         float cash0 = store.Economy.Cash;
-        for (int i = 0; i < 3; i++) Place("checkout", 10 + i * 3, 6);
-
-        string[] dry = { "Soft Drinks", "Snacks", "Pasta", "Cereal", "Canned Soup", "Rice", "Coffee", "Soft Drinks", "Snacks", "Pasta",
-                         "Toilet Paper", "Detergent", "Dish Soap", "Batteries", "Cereal" };
-        int k = 0;
-        foreach (int x in new[] { 2, 5, 8 })
-            for (int z = 14; z <= 20; z += 2)
-                Place("gondola", x, z, 0, dry[k++ % dry.Length]);
-
-        string[] fresh = { "Bananas", "Apples", "Tomatoes", "Potatoes", "Lettuce" };
-        k = 0;
-        foreach (int x in new[] { 14 })
-            for (int z = 14; z <= 22; z += 2)
-                Place("produce", x, z, 0, fresh[k++ % fresh.Length]);
-
-        string[] dairy = { "Milk", "Eggs", "Cheese", "Yogurt", "Frozen Pizza", "Ice Cream", "Milk", "Yogurt", "Cheese", "Eggs" };
-        k = 0;
-        foreach (int x in new[] { 20, 23 })
-            for (int z = 14; z <= 22; z += 2)
-                Place("fridge", x, z, 0, dairy[k++ % dairy.Length]);
-
-        // a sideways shelf to check rotation
-        Place("gondola", 27, 10, 1, "Snacks");
-
+        PlaceAnywhere("checkout");
+        PlaceAnywhere("checkout");
+        foreach (var name in new[] { "Soft Drinks", "Snacks", "Pasta", "Canned Soup", "Soft Drinks", "Snacks" })
+            PlaceAnywhere("gondola", name);
         int n = store.OrderAllToPar(0f);
         store.OrderExpress();
         Note("PLAYER: built " + store.Fixtures.Count + " fixtures for " + Economy.Money(cash0 - store.Economy.Cash)
             + ", ordered " + n + " products by express. Cash " + Economy.Money(store.Economy.Cash));
     }
 
+    static int Count(Role r, Shift sh) { return store.Staff.All.Count(e => e != null && !e.Leaving && e.Role == r && e.Shift == sh); }
+
+    static void HireIf(Role r, Shift sh, int want, Func<Applicant, float> score = null, bool essential = false)
+    {
+        if (store.RoleLock(r) != null) return;
+        while (Count(r, sh) < want && store.Staff.Applicants.Count > 0 && (essential || store.Economy.Cash > Reserve))
+        {
+            var a = score != null ? store.Staff.Applicants.OrderByDescending(score).First() : store.Staff.Applicants[0];
+            var e = store.Staff.Hire(a, r, sh, null);
+            Note("PLAYER: hired " + e.DisplayName + " as " + Catalog.RoleName(r) + " (" + sh + ")");
+        }
+    }
+
+    /// <summary>A sensible but unhurried player: checks the store twice a day.</summary>
     static void Script(int day, int hour, HashSet<string> done)
     {
         var s = store;
-        if (day == 1 && hour == 20) { int n = s.OrderAllToPar(0f); Note("PLAYER: ordered " + n + " products to par"); }
-
-        if (day == 2 && hour == 9 && done.Add("am"))
+        if (hour == 21)
         {
-            var best = s.Staff.Applicants.OrderByDescending(a => a.Leadership).First();
-            var e = s.Staff.Hire(best, Role.AssistantManager, Shift.Evening, null);
-            Note("PLAYER: hired " + e.DisplayName + " as assistant manager (leadership " + e.Leadership + ")");
-            var n = s.Staff.Hire(s.Staff.Applicants[0], Role.Stocker, Shift.Night, null);
-            Note("PLAYER: hired " + n.DisplayName + " as night stocker");
-            var c = s.Staff.Hire(s.Staff.Applicants[0], Role.Cashier, Shift.Evening, null);
-            Note("PLAYER: hired " + c.DisplayName + " as evening cashier");
-        }
-
-        if (day == 3 && hour == 9 && done.Add("bakery"))
-        {
-            Place("oven", 31, 14, 0);
-            Place("bakery_shelf", 27, 14, 0, "Bread");
-            Place("bakery_shelf", 27, 16, 0, "Croissants");
-            var pick = s.Staff.Applicants.OrderByDescending(a => a.Specialty == Specialty.Baking ? 10 : 0).First();
-            var b = s.Staff.Hire(pick, Role.Baker, Shift.Morning, null);
-            var b2 = s.Staff.Hire(s.Staff.Applicants[0], Role.Baker, Shift.Night, null);
-            Note("PLAYER: bakery built, bakers " + b.DisplayName + " (" + b.Specialty + ") and " + b2.DisplayName + ". Cash " + Economy.Money(s.Economy.Cash));
-        }
-
-        if (day == 4 && hour == 11 && done.Add("move"))
-        {
-            var g = s.Fixtures.FirstOrDefault(f => f.Def.Id == "gondola" && f.Rot == 1);
-            if (g != null)
+            foreach (var p in s.Products)
             {
-                string why = s.Move(g, new Vector2Int(36, 14), 0);
-                Note("PLAYER: moved the sideways shelf: " + (why ?? "ok") + ", it still holds " + (g.Product != null ? g.Product.Name : "nothing"));
+                if (!p.Carried || p.Baked) continue;
+                int cs = p.Def.CaseSize, sug = s.SuggestedPar(p);
+                if (p.MissedToday > 0 && p.Back.Total == 0) p.Par = Mathf.Min(p.Par + Mathf.Max(cs, (p.Par / 5) / cs * cs), sug * 3);
+                else if (p.Back.Total > p.Par / 2) p.Par = Mathf.Max(sug, p.Par - Mathf.Max(cs, (p.Par / 5) / cs * cs));
             }
-            var sell = s.Fixtures.LastOrDefault(f => f.Def.Id == "gondola");
-            if (sell != null) { var p = sell.Product; s.Sell(sell); Note("PLAYER: sold a shelf of " + (p != null ? p.Name : "-") + ", back room now " + (p != null ? p.Back.Total : 0)); }
-            var emp = s.Staff.All.FirstOrDefault(x => x.OnShift && x.Role == Role.Stocker);
-            if (emp != null) { s.Avatar.StandUp(); s.Avatar.Teleport(emp.Tile); Note("PLAYER: " + emp.Praise()); s.Avatar.SitDown(); }
+            int n = s.OrderAllToPar(0f);
+            if (n > 0 && day % 5 == 0) Note("PLAYER: ordered " + n + " products to par");
+        }
+        if (hour != 9 && hour != 15) return;
+
+        // 1. licences: cheapest unlocked first, keep a reserve for fixtures
+        foreach (var l in Catalog.Licences.OrderBy(l => l.Level).ThenBy(l => l.Cost))
+        {
+            if (s.Owns(l) || s.LicenceLock(l) != null) continue;
+            float fixtures = 0f;
+            foreach (var fid in l.Fixtures) fixtures += Catalog.FixtureById(fid).Cost;
+            fixtures += l.Products.Count * 900f;
+            if (s.Economy.Cash - l.Cost - fixtures < Reserve) continue;
+            s.BuyLicence(l);
+            Note("PLAYER: bought licence " + l.Name + " (day " + day + ", level " + s.Level + "). Cash " + Economy.Money(s.Economy.Cash));
         }
 
-        if (day == 6 && hour == 9 && done.Add("deli"))
+        // 2. ovens before bakery shelves
+        if (s.Owns(Catalog.LicenceById("bakery")) && !s.Fixtures.Any(f => f.Def.Id == "oven") && s.Economy.Cash > 6000f + Reserve)
+            if (PlaceAnywhere("oven") != null) Note("PLAYER: placed an oven");
+
+        // 3. a fixture for every licensed product not on sale yet
+        foreach (var p in s.Products)
         {
-            Place("deli_counter", 32, 21, 0, "Chicken");
-            Place("deli_counter", 36, 21, 0, "Sliced Ham");
-            Place("deli_counter", 40, 21, 0, "Steak");
-            var c = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Morning, null);
-            var c2 = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Evening, null);
-            s.OrderAllToPar(0f);
-            Note("PLAYER: deli built, clerks " + c.DisplayName + " and " + c2.DisplayName + ". Cash " + Economy.Money(s.Economy.Cash));
+            if (p.Carried || !s.IsLicensed(p.Def)) continue;
+            var fid = p.Def.Category.Fixture;
+            if (p.Baked && !s.Fixtures.Any(f => f.Def.Id == "oven")) continue;
+            if (s.Economy.Cash < Catalog.FixtureById(fid).Cost + Reserve) continue;
+            if (PlaceAnywhere(fid, p.Name) != null) Note("PLAYER: new " + fid + " for " + p.Name);
+            else if (done.Add("full-" + fid)) Note("PLAYER: no room for a " + fid);
         }
-        if (day == 7 && hour == 9 && done.Add("expand"))
+
+        // 4. second shelves for best sellers (evening check only)
+        if (hour == 15)
+            foreach (var p in s.Products.Where(p => p.Carried && !p.Baked).OrderByDescending(p => p.SoldToday).Take(3))
+            {
+                if (p.SoldToday < p.ShelfCap * 0.9f || p.Fixtures.Count >= 3) continue;
+                var fid = p.Def.Category.Fixture;
+                if (s.Economy.Cash < Catalog.FixtureById(fid).Cost + Reserve * 2f) continue;
+                if (PlaceAnywhere(fid, p.Name) != null) Note("PLAYER: extra " + fid + " for " + p.Name + " (sold " + p.SoldToday + " by 15:00)");
+            }
+
+        // 5. checkouts by queue pressure
+        var y = s.Economy.History.Count > 0 ? s.Economy.History[s.Economy.History.Count - 1] : null;
+        int lanes = s.Lanes.Count;
+        if (y != null && hour == 9 && y.Walkouts >= 4 && lanes < 6 && s.Economy.Cash > 1500f + Reserve * 2f)
+            if (PlaceAnywhere("checkout") != null) { lanes++; Note("PLAYER: extra checkout (" + y.Walkouts + " walkouts yesterday)"); }
+
+        // 6. staff
+        int shelves = s.Fixtures.Count(f => f.HoldsProducts && !f.IsCounter);
+        int cashiers = Mathf.Min(lanes, 1 + (int)(s.ExpectedCustomersPerDay / 220f));
+        HireIf(Role.Cashier, Shift.Morning, cashiers, null, true);
+        HireIf(Role.Cashier, Shift.Evening, cashiers, null, true);
+        HireIf(Role.Stocker, Shift.Morning, 1 + shelves / 10, null, true);
+        HireIf(Role.Stocker, Shift.Evening, Mathf.Max(1, shelves / 12), null, true);
+        HireIf(Role.Cleaner, Shift.Morning, 1);
+        if (s.Economy.Cash > 12000f) HireIf(Role.AssistantManager, Shift.Evening, 1, a => a.Leadership);
+        if (s.Staff.Assistant != null && done.Add("delegate")) { s.Delegation.Ordering = true; s.Delegation.Complaints = true; s.Delegation.Checkouts = true; }
+        if (s.Fixtures.Any(f => f.Def.Id == "oven")) { HireIf(Role.Baker, Shift.Night, 1, a => a.Specialty == Specialty.Baking ? 1 : 0); HireIf(Role.Baker, Shift.Morning, 1); }
+        if (s.Fixtures.Any(f => f.Def.Id == "deli_counter")) { HireIf(Role.DeliClerk, Shift.Morning, 1, a => a.Specialty == Specialty.Butchery ? 1 : 0); HireIf(Role.DeliClerk, Shift.Evening, 1); }
+
+        // 7. expansion
+        if (s.CanExpand && s.Economy.Cash > s.ExpansionCost + Reserve * 2f)
         {
-            if (s.CanExpand) { s.Expand(); Note("PLAYER: expansion ordered, cash " + Economy.Money(s.Economy.Cash)); }
-            else Note("PLAYER: can't afford expansion (" + Economy.Money(s.Economy.Cash) + ")");
+            s.Expand();
+            Note("PLAYER: expansion ordered (day " + day + ", level " + s.Level + "). Cash " + Economy.Money(s.Economy.Cash));
         }
-        if (day == 8 && hour == 9 && done.Add("after-expand"))
-            Place("gondola", 50, 14, 0, "Coffee");
     }
 
     static void Note(string s) { Console.WriteLine("   >> " + s); }
@@ -198,6 +237,8 @@ public static class Runner
 
     static void PrintDay(DayLedger d)
     {
+        Console.WriteLine("LEVEL " + store.Level + " xp " + store.XP + "  licences " + Catalog.Licences.Count(l => store.Owns(l)) + "/" + Catalog.Licences.Count
+            + "  fixtures " + store.Fixtures.Count + "  staff " + store.Staff.All.Count + "  width " + store.Grid.W);
         Console.WriteLine(string.Format(
             "DAY {0}: customers {1}, items {2}, sales {3}, wholesale {4}, wages {5}, rent {6}, build {7}, PROFIT {8} | sat {9:0} rep {10:0.0} | walkouts {11}, complaints {12}/{13} resolved | waste {14} | cash {15}",
             d.Day, d.Customers, d.ItemsSold, Economy.Money(d.Sales), Economy.Money(d.Wholesale), Economy.Money(d.Wages),
@@ -229,7 +270,7 @@ public static class Runner
             store.Avatar.StandUp();
             onGui.Invoke(hud, null);
             store.Avatar.SitDown();
-            for (int t = 0; t < 8; t++) { hud.ShowTab(t); onGui.Invoke(hud, null); }
+            for (int t = 0; t < 9; t++) { hud.ShowTab(t); onGui.Invoke(hud, null); }
             BuildMode.I.StartPlacing(Catalog.FixtureById("checkout"));
             onGui.Invoke(hud, null);
             BuildMode.I.CancelTool();

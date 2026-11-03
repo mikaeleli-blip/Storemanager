@@ -17,6 +17,7 @@ namespace StoreManager
         public float Demand;        // relative weight on shopping lists
         public int CaseSize;
         public CategoryDef Category;
+        public LicenceDef Licence;
 
         public ProductDef(string name, float cost, float price, int life, float demand, int caseSize)
         {
@@ -40,6 +41,22 @@ namespace StoreManager
         {
             get { float t = 0f; for (int i = 0; i < Products.Count; i++) t += Products[i].Demand; return t; }
         }
+    }
+
+    /// <summary>
+    /// What a licence unlocks. Department licences open a fixture type (and sometimes a staff role) with a
+    /// first few products; later licences in the same department add more products.
+    /// </summary>
+    public class LicenceDef
+    {
+        public string Id, Name;
+        public int Level;
+        public float Cost;
+        public bool Department;
+        public LicenceDef Requires;
+        public readonly List<ProductDef> Products = new List<ProductDef>();
+        public readonly List<string> Fixtures = new List<string>();
+        public readonly List<Role> Roles = new List<Role>();
     }
 
     /// <summary>
@@ -68,7 +85,25 @@ namespace StoreManager
         public static readonly List<CategoryDef> Categories = new List<CategoryDef>();
         public static readonly List<ProductDef> Products = new List<ProductDef>();
         public static readonly List<FixtureDef> Fixtures = new List<FixtureDef>();
+        public static readonly List<LicenceDef> Licences = new List<LicenceDef>();
         public static float TotalDemand;
+
+        /// <summary>Total XP needed to reach level i + 1 (index 0 = level 1).</summary>
+        public static readonly int[] LevelXp = { 0, 900, 2400, 4600, 7600, 11600, 16800, 24000, 34000, 47000, 63000, 83000 };
+        public static int MaxLevel { get { return LevelXp.Length; } }
+
+        /// <summary>Store level needed for each expansion (first, second, ...).</summary>
+        public static readonly int[] ExpansionLevels = { 3, 5, 7, 9, 11 };
+
+        public static int RoleLevel(Role r)
+        {
+            switch (r)
+            {
+                case Role.Cleaner: return 2;
+                case Role.AssistantManager: return 3;
+                default: return 1;
+            }
+        }
 
         static Catalog()
         {
@@ -175,6 +210,65 @@ namespace StoreManager
 
             TotalDemand = 0f;
             for (int i = 0; i < Products.Count; i++) TotalDemand += Products[i].Demand;
+
+            // ---- licences (level, cost, needs, unlocks)
+            var basics = Lic("basics", "Basic Groceries", 1, 0f, null, true, new[] { "Pasta", "Canned Soup", "Soft Drinks", "Snacks" },
+                new[] { "gondola", "checkout" }, new[] { Role.Cashier, Role.Stocker });
+            Lic("pantry", "Pantry Staples", 2, 1200f, basics, false, new[] { "Rice", "Cereal" }, null, null);
+            var produceL = Lic("produce", "Produce Department", 2, 2500f, null, true, new[] { "Apples", "Bananas", "Potatoes" },
+                new[] { "produce" }, null);
+            Lic("coffee", "Coffee", 3, 1500f, basics, false, new[] { "Coffee" }, null, null);
+            var dairyL = Lic("dairy", "Dairy Department", 3, 4000f, null, true, new[] { "Milk", "Eggs", "Yogurt" },
+                new[] { "fridge" }, null);
+            Lic("salad_veg", "Salad Vegetables", 4, 1800f, produceL, false, new[] { "Tomatoes", "Lettuce" }, null, null);
+            var householdL = Lic("household", "Household Department", 4, 2500f, null, true, new[] { "Toilet Paper", "Dish Soap" },
+                null, null);
+            Lic("frozen", "Frozen Food", 5, 3500f, dairyL, false, new[] { "Frozen Pizza", "Ice Cream" }, null, null);
+            Lic("cheese", "Cheese", 5, 1500f, dairyL, false, new[] { "Cheese" }, null, null);
+            var bakeryL = Lic("bakery", "Bakery Department", 6, 8000f, null, true, new[] { "Bread", "Croissants" },
+                new[] { "oven", "bakery_shelf" }, new[] { Role.Baker });
+            Lic("cleaning", "Cleaning & Batteries", 6, 2000f, householdL, false, new[] { "Detergent", "Batteries" }, null, null);
+            var deliL = Lic("deli", "Deli Department", 7, 12000f, null, true, new[] { "Sliced Ham", "Chicken" },
+                new[] { "deli_counter" }, new[] { Role.DeliClerk });
+            Lic("cakes", "Cakes", 8, 3000f, bakeryL, false, new[] { "Cakes" }, null, null);
+            Lic("deli_salads", "Deli Salads", 9, 3000f, deliL, false, new[] { "Salads" }, null, null);
+            Lic("butcher", "Butcher's Cuts", 10, 6000f, deliL, false, new[] { "Steak" }, null, null);
+        }
+
+        static LicenceDef Lic(string id, string name, int level, float cost, LicenceDef requires, bool dept,
+            string[] products, string[] fixtures, Role[] roles)
+        {
+            var l = new LicenceDef { Id = id, Name = name, Level = level, Cost = cost, Requires = requires, Department = dept };
+            for (int i = 0; i < products.Length; i++)
+            {
+                var p = ProductByName(products[i]);
+                l.Products.Add(p);
+                p.Licence = l;
+            }
+            if (fixtures != null) l.Fixtures.AddRange(fixtures);
+            if (roles != null) l.Roles.AddRange(roles);
+            Licences.Add(l);
+            return l;
+        }
+
+        public static LicenceDef LicenceById(string id)
+        {
+            for (int i = 0; i < Licences.Count; i++) if (Licences[i].Id == id) return Licences[i];
+            return null;
+        }
+
+        /// <summary>The licence that unlocks a fixture type, or null if it's always available.</summary>
+        public static LicenceDef LicenceForFixture(string fixtureId)
+        {
+            for (int i = 0; i < Licences.Count; i++) if (Licences[i].Fixtures.Contains(fixtureId)) return Licences[i];
+            return null;
+        }
+
+        public static LicenceDef LicenceForRole(Role r)
+        {
+            for (int i = 0; i < Licences.Count; i++)
+                if (Licences[i].Roles.Contains(r) && Licences[i].Cost > 0f) return Licences[i];
+            return null;
         }
 
         static void AddFixture(FixtureDef f) { Fixtures.Add(f); }

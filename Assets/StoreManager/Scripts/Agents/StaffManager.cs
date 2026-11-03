@@ -209,13 +209,8 @@ namespace StoreManager
         public void HireStartingStaff()
         {
             HireFixed(Role.Cashier, Shift.Morning, null);
-            HireFixed(Role.Cashier, Shift.Morning, null);
             HireFixed(Role.Stocker, Shift.Morning, null);
-            HireFixed(Role.Stocker, Shift.Morning, null);
-            HireFixed(Role.Cleaner, Shift.Morning, null);
             HireFixed(Role.Cashier, Shift.Evening, null);
-            HireFixed(Role.Cashier, Shift.Evening, null);
-            HireFixed(Role.Stocker, Shift.Evening, null);
         }
 
         void HireFixed(Role r, Shift s, Category d)

@@ -178,8 +178,12 @@ namespace StoreManager
             {
                 var d = list[i];
                 bool on = Placing == d;
-                string label = d.Name + "   " + Economy.Money(d.Cost) + "   (" + d.W + "x" + d.D + ")";
-                GUI.enabled = store.Economy.Cash >= d.Cost || on;
+                var lic = Catalog.LicenceForFixture(d.Id);
+                bool locked = !store.Owns(lic);
+                string label = locked
+                    ? d.Name + "   (needs " + lic.Name + ")"
+                    : d.Name + "   " + Economy.Money(d.Cost) + "   (" + d.W + "x" + d.D + ")";
+                GUI.enabled = !locked && (store.Economy.Cash >= d.Cost || on);
                 if (GUILayout.Toggle(on, label, "Button", GUILayout.Height(30f)) != on)
                 {
                     if (on) CancelTool();
@@ -216,7 +220,12 @@ namespace StoreManager
             if (f == null) return;
             if (f.Removed) { Selected = null; return; }
             bool edit = store.Avatar.AtDesk;
-            var choices = f.HoldsProducts ? Catalog.ProductsFor(f.Def) : new List<ProductDef>();
+            var choices = new List<ProductDef>();
+            if (f.HoldsProducts)
+            {
+                var all = Catalog.ProductsFor(f.Def);
+                for (int i = 0; i < all.Count; i++) if (store.IsLicensed(all[i])) choices.Add(all[i]);
+            }
             float h = 150f + (f.HoldsProducts ? 30f + ((choices.Count + 1) / 2) * 30f + 50f : 30f);
             var r = new Rect(sw - 408f, top, 400f, Mathf.Min(h, sh - top - 270f));
             hud.Panel(r);
@@ -239,6 +248,8 @@ namespace StoreManager
                 if (edit)
                 {
                     GUILayout.Label("What goes here:", hud.Bold);
+                    if (choices.Count < Catalog.ProductsFor(f.Def).Count)
+                        GUILayout.Label("More products unlock with licences (Licences tab).", hud.Small);
                     for (int i = 0; i < choices.Count; i += 2)
                     {
                         GUILayout.BeginHorizontal();
