@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace StoreManager
 {
@@ -19,17 +18,31 @@ namespace StoreManager
         public readonly Economy Economy = new Economy();
         public readonly Delegation Delegation = new Delegation();
 
-        public readonly Department[] Slots = new Department[Layout.MaxSlots];
-        public int SlotCount = Layout.StartSlots;
+        public int SlotCount = Layout.StartSlots;   // 12 m sections of floor
         public bool ExpansionPending;
         public float Reputation = 50f;
+
+        public readonly List<Category> Categories = new List<Category>();
+        public readonly List<Product> Products = new List<Product>();
+        readonly Dictionary<ProductDef, Product> productOf = new Dictionary<ProductDef, Product>();
+        readonly Dictionary<CategoryDef, Category> categoryOf = new Dictionary<CategoryDef, Category>();
+
+        public readonly List<Fixture> Fixtures = new List<Fixture>();
+        readonly Dictionary<Vector2Int, Fixture> fixtureAt = new Dictionary<Vector2Int, Fixture>();
+        int nextFixtureId = 1;
 
         public readonly List<CheckoutLane> Lanes = new List<CheckoutLane>();
         public readonly List<Customer> Customers = new List<Customer>();
         public readonly List<Customer> Complaints = new List<Customer>();
         public readonly List<string> Log = new List<string>();
 
-        float spawnAcc, visualsTimer, truckTimer;
+        float spawnAcc, visualsTimer, truckTimer, expressTimer = -1f;
+        public bool ExpressPending { get { return expressTimer >= 0f; } }
+
+        public const float BaseTraffic = 0.28f;
+        public const float ParDays = 2f;
+        public const float ExpressSurcharge = 0.25f;
+        public const float SellRefund = 0.5f;
 
         static readonly float[] HourWeight =
         {
@@ -43,9 +56,6 @@ namespace StoreManager
             new Color(0.6f, 0.43f, 0.3f), new Color(0.42f, 0.29f, 0.2f), new Color(0.98f, 0.88f, 0.8f)
         };
 
-        public const float BaseTraffic = 0.28f;
-        public const float ParDays = 2f;
-
         public int Expansions { get { return SlotCount - Layout.StartSlots; } }
         public int BackCapacity { get { return 9000 + 2000 * Expansions; } }
         public float Rent { get { return 700f + 300f * Expansions; } }
@@ -53,9 +63,20 @@ namespace StoreManager
         public Vector2Int StaffEntrance { get { return new Vector2Int(Grid.W - 4, Layout.DockRow); } }
         public Vector2Int DeskSeat { get { return new Vector2Int(3, 30); } }
 
+        /// <summary>Share of everything customers ask for that the store carries (by demand).</summary>
+        public float Variety
+        {
+            get
+            {
+                float carried = 0f;
+                for (int i = 0; i < Products.Count; i++) if (Products[i].Carried) carried += Products[i].Def.Demand;
+                return Catalog.TotalDemand > 0f ? carried / Catalog.TotalDemand : 0f;
+            }
+        }
+
         public float TrafficFactor
         {
-            get { return (0.4f + Reputation / 100f * 1.2f) * (0.7f + 0.1f * ActiveDepartmentCount); }
+            get { return (0.4f + Reputation / 100f * 1.2f) * (0.55f + 0.75f * Variety); }
         }
 
         public float ExpectedCustomersPerDay
@@ -74,28 +95,45 @@ namespace StoreManager
         {
             I = this;
             Clock = gameObject.AddComponent<GameClock>();
+            Clock.SetSpeed(0);   // start paused: build first
             Dirt = new DirtManager(transform);
             Staff = new StaffManager(this);
-            for (int i = 0; i < Layout.LaneCount(SlotCount); i++) Lanes.Add(new CheckoutLane(i));
             Builder = new StoreBuilder(this);
 
-            Slots[0] = new Department(Catalog.Get("grocery"), 0);
-            Slots[1] = new Department(Catalog.Get("produce"), 1);
-            Slots[2] = new Department(Catalog.Get("dairy"), 2);
-            Builder.BuildAll();
-            for (int i = 0; i < SlotCount; i++) if (Slots[i] != null) FillStartingStock(Slots[i]);
+            for (int c = 0; c < Catalog.Categories.Count; c++)
+            {
+                var cat = new Category(Catalog.Categories[c]);
+                Categories.Add(cat);
+                categoryOf[cat.Def] = cat;
+                for (int p = 0; p < cat.Def.Products.Count; p++)
+                {
+                    var prod = new Product(cat.Def.Products[p], cat) { Par = DefaultPar(cat.Def.Products[p]) };
+                    cat.Products.Add(prod);
+                    Products.Add(prod);
+                    productOf[prod.Def] = prod;
+                }
+            }
 
+            Builder.BuildAll();
             Staff.RefreshApplicants(true);
             Staff.HireStartingStaff();
             SpawnAvatar();
             SetupCameraAndLight();
             gameObject.AddComponent<Hud>();
+            gameObject.AddComponent<BuildMode>();
 
             Clock.HourChanged += OnHour;
             Clock.NewDay += OnNewDay;
             Economy.Today.Day = Clock.Day;
             Economy.PayRent(Rent);
-            Message("Welcome, manager. Your office is at the back left. Walk in and press Tab to sit at your desk.");
+            Message("Your store is empty. Place checkouts and shelves, pick what goes on each shelf, then order stock.");
+            Message("Time is paused. Press 1-4 or the speed buttons when you're ready to open.");
+        }
+
+        void Start()
+        {
+            Avatar.SitDown();
+            BuildMode.I.Open();
         }
 
         void SpawnAvatar()
@@ -129,7 +167,7 @@ namespace StoreManager
             Cam = cam.GetComponent<CameraRig>();
             if (Cam == null) Cam = cam.gameObject.AddComponent<CameraRig>();
             Cam.FollowTarget = Avatar.transform;
-            Cam.Focus = Avatar.transform.position;
+            Cam.Focus = new Vector3(Grid.W * 0.5f, 0f, 16f);
             UpdateCameraBounds();
 
             var atmosphere = new GameObject("Atmosphere").AddComponent<Atmosphere>();
@@ -156,16 +194,16 @@ namespace StoreManager
             return Mathf.Max(par, p.CaseSize * 2);
         }
 
-        void FillStartingStock(Department d)
+        public Product ProductOf(ProductDef def)
         {
-            for (int i = 0; i < d.Products.Count; i++)
-            {
-                var p = d.Products[i];
-                p.Par = DefaultPar(p.Def);
-                p.Shelf.Add(p.ShelfCap, p.Life);
-                if (!d.IsBakery) p.Back.Add(Mathf.Max(0, p.Par - p.ShelfCap), p.Life);
-            }
-            d.UpdateVisuals();
+            Product p;
+            return productOf.TryGetValue(def, out p) ? p : null;
+        }
+
+        public Category CategoryOf(CategoryDef def)
+        {
+            Category c;
+            return categoryOf.TryGetValue(def, out c) ? c : null;
         }
 
         // ------------------------------------------------------------------ loop
@@ -185,6 +223,11 @@ namespace StoreManager
             {
                 truckTimer -= Time.deltaTime;
                 if (truckTimer <= 0f && Builder.Truck != null) Builder.Truck.SetActive(false);
+            }
+            if (expressTimer >= 0f)
+            {
+                expressTimer -= Time.deltaTime * GameClock.GameMinutesPerSecond;
+                if (expressTimer < 0f) Deliver(true);
             }
         }
 
@@ -214,8 +257,7 @@ namespace StoreManager
 
         void UpdateVisuals()
         {
-            for (int i = 0; i < SlotCount; i++)
-                if (Slots[i] != null && Slots[i].Active) Slots[i].UpdateVisuals();
+            for (int i = 0; i < Fixtures.Count; i++) Fixtures[i].UpdateVisuals();
             for (int i = 0; i < Lanes.Count; i++)
             {
                 var lane = Lanes[i];
@@ -232,7 +274,7 @@ namespace StoreManager
             if (h == 6)
             {
                 CompleteConstruction();
-                Deliver();
+                Deliver(false);
             }
             if (h == GameClock.OpenHour) Message("The store is open.");
             if (h == GameClock.CloseHour)
@@ -259,17 +301,13 @@ namespace StoreManager
         void OnNewDay()
         {
             var today = Economy.Today;
-            for (int s = 0; s < SlotCount; s++)
+            for (int i = 0; i < Products.Count; i++)
             {
-                var d = Slots[s];
-                if (d == null) continue;
-                for (int i = 0; i < d.Products.Count; i++)
-                {
-                    var p = d.Products[i];
-                    int w = p.Shelf.Age() + p.Back.Age();
-                    p.WastedLastNight = w;
-                    today.WasteValue += w * p.Def.Cost;
-                }
+                var p = Products[i];
+                int w = p.Back.Age();
+                for (int f = 0; f < p.Fixtures.Count; f++) w += p.Fixtures[f].Stock.Age();
+                p.WastedLastNight = w;
+                today.WasteValue += w * p.Def.Cost;
             }
 
             var done = Economy.CloseDay(Clock.Day);
@@ -278,73 +316,182 @@ namespace StoreManager
             Message("Day " + done.Day + " done: sales " + Economy.Money(done.Sales) + ", profit " + Economy.Money(done.Profit)
                 + ", " + done.Customers + " customers, satisfaction " + done.AvgSatisfaction.ToString("0") + ".");
 
-            for (int s = 0; s < SlotCount; s++) if (Slots[s] != null) Slots[s].ResetDaily();
+            for (int i = 0; i < Products.Count; i++) Products[i].ResetDaily();
+            for (int i = 0; i < Categories.Count; i++) Categories[i].SalesToday = 0f;
             Economy.PayRent(Rent);
             Staff.RefreshApplicants(false);
             if (Economy.Cash < 0f) Message("Warning: the store is in the red.");
         }
 
-        // ------------------------------------------------------------------ departments, expansion
+        // ------------------------------------------------------------------ fixtures
 
-        public Department FindDepartment(DepartmentDef def)
+        public Fixture FixtureAt(Vector2Int t)
         {
-            for (int i = 0; i < SlotCount; i++)
-                if (Slots[i] != null && Slots[i].Def == def) return Slots[i];
-            return null;
+            Fixture f;
+            return fixtureAt.TryGetValue(t, out f) ? f : null;
         }
 
-        public Department FirstActive(DeptKind kind)
+        /// <summary>Tiles people stand on (cashier, clerk, baker, counter/till customer spot) can't be built over.</summary>
+        public bool IsReserved(Vector2Int t, Fixture ignore)
         {
-            for (int i = 0; i < SlotCount; i++)
-                if (Slots[i] != null && Slots[i].Active && Slots[i].Def.Kind == kind) return Slots[i];
-            return null;
-        }
-
-        public int ActiveDepartmentCount
-        {
-            get { int n = 0; for (int i = 0; i < SlotCount; i++) if (Slots[i] != null && Slots[i].Active) n++; return n; }
-        }
-
-        public bool CanBuild(int slot, DepartmentDef def)
-        {
-            return slot >= 0 && slot < SlotCount && Slots[slot] == null && FindDepartment(def) == null
-                && Economy.Cash >= def.BuildCost;
-        }
-
-        public void BuildDepartment(int slot, DepartmentDef def)
-        {
-            if (!CanBuild(slot, def)) return;
-            Economy.PayConstruction(def.BuildCost);
-            var d = new Department(def, slot) { UnderConstruction = true };
-            Slots[slot] = d;
-            for (int i = 0; i < d.Products.Count; i++)
+            for (int i = 0; i < Fixtures.Count; i++)
             {
-                var p = d.Products[i];
-                p.Par = DefaultPar(p.Def);
-                if (!d.IsBakery) p.OnOrder = p.Par;
+                var f = Fixtures[i];
+                if (f == ignore || f.Removed) continue;
+                if ((f.Def.HasWork && f.Work == t) || (f.Def.HasService && f.Service == t) || (f.Def.HasCashier && f.Cashier == t))
+                    return true;
             }
-            Builder.BuildDepartment(d);
-            string extra = d.IsBakery ? " You'll need a baker." : d.IsCounter ? " You'll need a deli clerk." : "";
-            Message(def.Name + " is being built in slot " + (slot + 1) + ". Ready at 06:00, opening stock comes with the delivery." + extra);
+            return false;
         }
 
-        public void Demolish(int slot)
+        public string CanPlace(FixtureDef def, Vector2Int origin, int rot)
         {
-            var d = Slots[slot];
-            if (d == null) return;
-            d.Removed = true;
-            Slots[slot] = null;
-            d.CounterQueue.Clear();
-            if (d.Root != null) Destroy(d.Root.gameObject);
-            Builder.ClearSlot(slot);
-            for (int i = 0; i < Staff.All.Count; i++)
-            {
-                var e = Staff.All[i];
-                if (e != null && e.AssignedDept == d) { e.AssignedDept = null; e.Restart(); }
-            }
+            if (Economy.Cash < def.Cost) return "Not enough cash (" + Economy.Money(def.Cost) + ").";
+            return Placement.Validate(this, def, origin, rot, null);
+        }
+
+        public Fixture Place(FixtureDef def, Vector2Int origin, int rot)
+        {
+            if (CanPlace(def, origin, rot) != null) return null;
+            Economy.PayConstruction(def.Cost);
+            var f = new Fixture(def, nextFixtureId++);
+            f.SetPlacement(origin, rot);
+            Fixtures.Add(f);
+            Occupy(f);
+            if (f.IsCheckout) RebuildLanes();
+            Builder.BuildFixture(f);
             RepathAll();
-            Message(d.Name + " was removed. Its stock was thrown out.");
+            return f;
         }
+
+        public string Move(Fixture f, Vector2Int origin, int rot)
+        {
+            string why = Placement.Validate(this, f.Def, origin, rot, f);
+            if (why != null) return why;
+            Vacate(f);
+            f.SetPlacement(origin, rot);
+            Occupy(f);
+            Builder.BuildFixture(f);
+            if (f.Lane != null) f.Lane.Queue.Clear();
+            f.Waiting.Clear();
+            RepathAll();
+            return null;
+        }
+
+        public void Sell(Fixture f)
+        {
+            if (f == null || f.Removed) return;
+            AssignProduct(f, null);
+            f.Removed = true;
+            Vacate(f);
+            Fixtures.Remove(f);
+            if (f.Lane != null)
+            {
+                f.Lane.Queue.Clear();
+                RebuildLanes();
+            }
+            f.Waiting.Clear();
+            Builder.DestroyFixture(f);
+            Economy.PayConstruction(-f.Def.Cost * SellRefund);
+            RepathAll();
+        }
+
+        void Occupy(Fixture f)
+        {
+            for (int i = 0; i < f.Tiles.Count; i++)
+            {
+                fixtureAt[f.Tiles[i]] = f;
+                Grid.SetBlocked(f.Tiles[i].x, f.Tiles[i].y, true);
+            }
+        }
+
+        void Vacate(Fixture f)
+        {
+            for (int i = 0; i < f.Tiles.Count; i++)
+            {
+                Fixture at;
+                if (fixtureAt.TryGetValue(f.Tiles[i], out at) && at == f)
+                {
+                    fixtureAt.Remove(f.Tiles[i]);
+                    Grid.SetBlocked(f.Tiles[i].x, f.Tiles[i].y, false);
+                }
+            }
+        }
+
+        /// <summary>After a rebuild of the grid (expansion), mark every fixture's tiles again.</summary>
+        public void ReapplyFixtures()
+        {
+            fixtureAt.Clear();
+            for (int i = 0; i < Fixtures.Count; i++) Occupy(Fixtures[i]);
+        }
+
+        /// <summary>Put a product on a shelf or counter (or clear it). Stock already on it goes to the back room.</summary>
+        public bool AssignProduct(Fixture f, ProductDef def)
+        {
+            if (!f.HoldsProducts) return false;
+            if (def != null && def.Category.Fixture != f.Def.Id) return false;
+            if (f.Product != null)
+            {
+                var old = f.Product;
+                if (!old.Baked) f.Stock.MoveTo(old.Back, f.Stock.Total);
+                f.Stock.Clear();
+                old.Fixtures.Remove(f);
+            }
+            f.Product = def != null ? ProductOf(def) : null;
+            if (f.Product != null) f.Product.Fixtures.Add(f);
+            if (f.ClaimedBy != null) f.ClaimedBy.Restart();
+            Builder.BuildStockRows(f);
+            return true;
+        }
+
+        void RebuildLanes()
+        {
+            var keep = new List<CheckoutLane>();
+            for (int i = 0; i < Fixtures.Count; i++)
+            {
+                var f = Fixtures[i];
+                if (!f.IsCheckout || f.Removed) continue;
+                if (f.Lane == null) f.Lane = new CheckoutLane(f);
+                keep.Add(f.Lane);
+            }
+            for (int i = 0; i < Lanes.Count; i++)
+            {
+                var old = Lanes[i];
+                if (!keep.Contains(old) && old.Cashier != null) old.Cashier.Restart();
+            }
+            Lanes.Clear();
+            Lanes.AddRange(keep);
+            for (int i = 0; i < Lanes.Count; i++) Lanes[i].Index = i;
+        }
+
+        public int CountFixtures(string id)
+        {
+            int n = 0;
+            for (int i = 0; i < Fixtures.Count; i++) if (Fixtures[i].Def.Id == id) n++;
+            return n;
+        }
+
+        public Fixture NearestFixture(string id, Vector3 from)
+        {
+            Fixture best = null;
+            float bd = float.MaxValue;
+            for (int i = 0; i < Fixtures.Count; i++)
+            {
+                var f = Fixtures[i];
+                if (f.Def.Id != id || f.Removed) continue;
+                float d = (f.Center - from).sqrMagnitude;
+                if (d < bd) { bd = d; best = f; }
+            }
+            return best;
+        }
+
+        public Vector2Int BackPickNear(Fixture f)
+        {
+            int x = f != null ? f.Origin.x : 10;
+            return new Vector2Int(Mathf.Clamp(x, 10, Grid.W - 2), 28);
+        }
+
+        // ------------------------------------------------------------------ expansion
 
         public bool CanExpand
         {
@@ -356,36 +503,19 @@ namespace StoreManager
             if (!CanExpand) return;
             Economy.PayConstruction(ExpansionCost);
             ExpansionPending = true;
-            Message("Expansion ordered: one more department slot and checkout lane. Ready at 06:00.");
+            Message("Expansion ordered: 12 m more floor space and a bigger back room. Ready at 06:00.");
         }
 
         void CompleteConstruction()
         {
-            bool changed = false;
-            if (ExpansionPending)
-            {
-                ExpansionPending = false;
-                SlotCount++;
-                while (Lanes.Count < Layout.LaneCount(SlotCount)) Lanes.Add(new CheckoutLane(Lanes.Count));
-                changed = true;
-                Message("Expansion finished: slot " + SlotCount + " and checkout " + Lanes.Count + " are ready.");
-            }
-            for (int i = 0; i < SlotCount; i++)
-            {
-                var d = Slots[i];
-                if (d != null && d.UnderConstruction)
-                {
-                    d.UnderConstruction = false;
-                    changed = true;
-                    Message(d.Name + " is finished and open.");
-                }
-            }
-            if (changed)
-            {
-                Builder.BuildAll();
-                UpdateCameraBounds();
-                RepathAll();
-            }
+            if (!ExpansionPending) return;
+            ExpansionPending = false;
+            SlotCount++;
+            Builder.BuildAll();
+            ReapplyFixtures();
+            UpdateCameraBounds();
+            RepathAll();
+            Message("Expansion finished: the store is " + Grid.W + " m wide now.");
         }
 
         public void RepathAll()
@@ -399,90 +529,84 @@ namespace StoreManager
 
         public int BackStockTotal
         {
-            get
-            {
-                int t = 0;
-                for (int s = 0; s < SlotCount; s++)
-                    if (Slots[s] != null) t += Slots[s].BackTotal;
-                return t;
-            }
+            get { int t = 0; for (int i = 0; i < Products.Count; i++) t += Products[i].Back.Total; return t; }
         }
 
         public int OnOrderTotal
         {
-            get
-            {
-                int t = 0;
-                for (int s = 0; s < SlotCount; s++)
-                    if (Slots[s] != null)
-                        for (int i = 0; i < Slots[s].Products.Count; i++) t += Slots[s].Products[i].OnOrder;
-                return t;
-            }
+            get { int t = 0; for (int i = 0; i < Products.Count; i++) t += Products[i].OnOrder; return t; }
         }
 
-        public void Order(ProductStock p, int qty)
+        public float OnOrderCost
         {
-            if (qty > 0 && !p.Dept.Removed && !p.Dept.IsBakery) p.OnOrder += qty;
+            get { float t = 0f; for (int i = 0; i < Products.Count; i++) t += Products[i].OnOrder * Products[i].Def.Cost; return t; }
         }
 
-        public int OrderToPar(Department d, float error)
+        public void Order(Product p, int qty)
         {
-            if (d == null || d.IsBakery || d.Removed) return 0;
-            int lines = 0;
-            for (int i = 0; i < d.Products.Count; i++)
-            {
-                var p = d.Products[i];
-                int need = p.Par - (p.OnHand + p.OnOrder);
-                if (need <= 0) continue;
-                float q = need;
-                if (error > 0f) q *= Random.Range(1f - error, 1f + error);
-                int cases = Mathf.Max(1, Mathf.CeilToInt(q / p.Def.CaseSize));
-                p.OnOrder += cases * p.Def.CaseSize;
-                lines++;
-            }
-            return lines;
+            if (qty > 0 && !p.Baked) p.OnOrder += qty;
+        }
+
+        public int OrderToPar(Product p, float error)
+        {
+            if (p.Baked || !p.Carried) return 0;
+            int need = p.Par - (p.OnHand + p.OnOrder);
+            if (need <= 0) return 0;
+            float q = need;
+            if (error > 0f) q *= Random.Range(1f - error, 1f + error);
+            int cases = Mathf.Max(1, Mathf.CeilToInt(q / p.Def.CaseSize));
+            p.OnOrder += cases * p.Def.CaseSize;
+            return 1;
         }
 
         public int OrderAllToPar(float error)
         {
             int lines = 0;
-            for (int s = 0; s < SlotCount; s++) lines += OrderToPar(Slots[s], error);
+            for (int i = 0; i < Products.Count; i++) lines += OrderToPar(Products[i], error);
             return lines;
         }
 
-        void Deliver()
+        /// <summary>Send everything on order now: arrives in an hour, costs 25% more.</summary>
+        public bool OrderExpress()
         {
+            if (OnOrderTotal == 0 || ExpressPending) return false;
+            expressTimer = 60f;
+            Message("Express delivery booked: arrives in about an hour (+25%).");
+            return true;
+        }
+
+        void Deliver(bool express)
+        {
+            if (express) expressTimer = -1f;
             int space = BackCapacity - BackStockTotal;
             float cost = 0f;
             int units = 0, refused = 0;
-            for (int s = 0; s < SlotCount; s++)
+            for (int i = 0; i < Products.Count; i++)
             {
-                var d = Slots[s];
-                if (d == null) continue;
-                for (int i = 0; i < d.Products.Count; i++)
-                {
-                    var p = d.Products[i];
-                    if (p.OnOrder <= 0) continue;
-                    int q = Mathf.Min(p.OnOrder, Mathf.Max(0, space));
-                    p.Back.Add(q, p.Life);
-                    space -= q;
-                    units += q;
-                    cost += q * p.Def.Cost;
-                    refused += p.OnOrder - q;
-                    p.OnOrder = 0;
-                }
+                var p = Products[i];
+                if (p.OnOrder <= 0) continue;
+                int q = Mathf.Min(p.OnOrder, Mathf.Max(0, space));
+                p.Back.Add(q, p.Life);
+                space -= q;
+                units += q;
+                cost += q * p.Def.Cost;
+                refused += p.OnOrder - q;
+                p.OnOrder = 0;
             }
+            if (express) cost *= 1f + ExpressSurcharge;
             if (units > 0)
             {
                 Economy.PayWholesale(cost);
-                Message("Delivery arrived: " + units + " units for " + Economy.Money(cost) + "."
+                Message((express ? "Express delivery" : "Delivery") + " arrived: " + units + " units for " + Economy.Money(cost) + "."
                     + (refused > 0 ? " " + refused + " units refused: the back room is full." : ""));
                 if (Builder.Truck != null) Builder.Truck.SetActive(true);
                 truckTimer = 60f;
             }
-            else
+            else if (!express)
             {
-                Message("No delivery today: nothing was ordered.");
+                bool carriesAnything = false;
+                for (int i = 0; i < Products.Count; i++) if (Products[i].Carried && !Products[i].Baked) carriesAnything = true;
+                if (carriesAnything) Message("No delivery today: nothing was ordered.");
             }
         }
 
@@ -495,20 +619,22 @@ namespace StoreManager
 
         public Vector2Int CheckoutWaitTile()
         {
-            int last = Lanes[Lanes.Count - 1].CounterX + 1;
-            return new Vector2Int(Random.Range(Lanes[0].CounterX - 1, last + 1), Random.Range(10, 12));
+            if (Lanes.Count > 0)
+            {
+                var l = Lanes[Random.Range(0, Lanes.Count)];
+                return Grid.NearestWalkable(l.QueueSpot(6) + l.Fixture.QueueDir, false);
+            }
+            return new Vector2Int(Random.Range(6, Mathf.Min(Grid.W - 1, 20)), Random.Range(6, 11));
         }
 
         public Vector2Int RandomFloorTile()
         {
-            int tries = 0;
-            while (tries++ < 10)
+            for (int tries = 0; tries < 20; tries++)
             {
-                var d = Slots[Random.Range(0, SlotCount)];
-                if (d != null && d.Active && d.FloorTiles.Count > 0)
-                    return d.FloorTiles[Random.Range(0, d.FloorTiles.Count)];
+                var t = new Vector2Int(Random.Range(0, Grid.W), Random.Range(Layout.LobbyStart, Layout.FloorEnd + 1));
+                if (Grid.Walkable(t, false)) return t;
             }
-            return new Vector2Int(Random.Range(1, Grid.W - 1), Random.Range(10, 12));
+            return new Vector2Int(3, Layout.LobbyStart + 2);
         }
 
         public CheckoutLane BestLane()
@@ -526,7 +652,7 @@ namespace StoreManager
         public CheckoutLane FreeLane()
         {
             for (int i = 0; i < Lanes.Count; i++)
-                if (Lanes[i].Cashier == null) return Lanes[i];
+                if (Lanes[i].Cashier == null && !Lanes[i].Removed) return Lanes[i];
             return null;
         }
 
@@ -567,9 +693,9 @@ namespace StoreManager
             return false;
         }
 
-        public bool CounterStaffed(Department d)
+        public bool CounterStaffed(Fixture f)
         {
-            return Staff.AnyOnShift(Role.DeliClerk, d);
+            return (f.Clerk != null && f.Clerk.OnShift) || Staff.OnShiftCount(Role.DeliClerk) > 0;
         }
 
         public void CustomerLeft(Customer c)
@@ -583,13 +709,7 @@ namespace StoreManager
         {
             Customers.Remove(c);
             Complaints.Remove(c);
-            for (int i = 0; i < SlotCount; i++)
-            {
-                var d = Slots[i];
-                if (d == null) continue;
-                d.CounterQueue.Remove(c);
-                for (int k = 0; k < d.Stations.Count; k++) if (d.Stations[k].Customer == c) d.Stations[k].Customer = null;
-            }
+            for (int i = 0; i < Fixtures.Count; i++) Fixtures[i].Waiting.Remove(c);
             for (int i = 0; i < Lanes.Count; i++) Lanes[i].Queue.Remove(c);
         }
 

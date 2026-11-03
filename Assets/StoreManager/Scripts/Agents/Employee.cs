@@ -7,7 +7,7 @@ namespace StoreManager
     {
         public Role Role;
         public Shift Shift;
-        public Department AssignedDept;   // stockers, bakers, deli clerks (null = anywhere)
+        public Category AssignedCategory;   // stockers only (null = anywhere)
 
         public float Speed, Service, Reliability, Leadership;
         public Specialty Specialty;
@@ -26,12 +26,12 @@ namespace StoreManager
 
         bool idle;
         float shiftStartAbs;
-        ProductStock claimed;
+        Fixture claimed;
         Spill claimedSpill;
         Customer complaintTarget;
-        CounterStation station;
+        Fixture station;
         readonly StockPile cart = new StockPile();
-        ProductStock cartProduct;
+        Product cartProduct;
 
         protected override bool StaffAccess { get { return true; } }
 
@@ -248,19 +248,21 @@ namespace StoreManager
                 if (Lane.Cashier == this) { Lane.Cashier = null; Lane.Closing = false; }
                 Lane = null;
             }
+            if (cartProduct != null && cart.Total > 0)
+            {
+                if (cartProduct.Baked)
+                {
+                    if (claimed != null && !claimed.Removed && claimed.Product == cartProduct) cart.MoveTo(claimed.Stock, cart.Total);
+                }
+                else cart.MoveTo(cartProduct.Back, cart.Total);
+            }
+            cartProduct = null;
+            cart.Clear();
             if (claimed != null)
             {
                 if (claimed.ClaimedBy == this) claimed.ClaimedBy = null;
                 claimed = null;
             }
-            if (cartProduct != null && cart.Total > 0)
-            {
-                if (!cartProduct.Dept.Active) cart.Clear();
-                else if (cartProduct.Dept.IsBakery) cart.MoveTo(cartProduct.Shelf, cart.Total);
-                else cart.MoveTo(cartProduct.Back, cart.Total);
-            }
-            cartProduct = null;
-            cart.Clear();
             if (claimedSpill != null)
             {
                 if (claimedSpill.ClaimedBy == this) claimedSpill.ClaimedBy = null;
@@ -353,10 +355,7 @@ namespace StoreManager
             idle = true;
             if (Random.value < 0.3f)
             {
-                Vector2Int t = AssignedDept != null && AssignedDept.FloorTiles.Count > 0
-                    ? AssignedDept.FloorTiles[Random.Range(0, AssignedDept.FloorTiles.Count)]
-                    : Store.I.RandomFloorTile();
-                yield return StartCoroutine(MoveTo(t));
+                yield return StartCoroutine(MoveTo(Store.I.RandomFloorTile()));
             }
             yield return StartCoroutine(Wait(3f));
             idle = false;
@@ -367,6 +366,12 @@ namespace StoreManager
             float calm = 0f, overtime = 0f;
             while (true)
             {
+                if (Lane != null && Lane.Removed)
+                {
+                    if (Lane.Cashier == this) Lane.Cashier = null;
+                    Lane = null;
+                    AtPost = false;
+                }
                 if (Lane == null)
                 {
                     Lane = Store.I.FreeLane();
@@ -429,24 +434,20 @@ namespace StoreManager
             AtPost = false;
         }
 
-        ProductStock FindRestock(out Department dept)
+        /// <summary>The emptiest shelf or counter (not bakery) that has stock waiting in the back room.</summary>
+        Fixture FindRestock()
         {
-            dept = null;
-            ProductStock best = null;
-            float bestFill = 0.7f;
-            var slots = Store.I.Slots;
-            for (int i = 0; i < slots.Length; i++)
+            Fixture best = null;
+            float bestScore = float.MaxValue;
+            var all = Store.I.Fixtures;
+            for (int i = 0; i < all.Count; i++)
             {
-                var d = slots[i];
-                if (d == null || !d.Active || d.IsBakery) continue;
-                if (AssignedDept != null && d != AssignedDept) continue;
-                var p = d.NeedsRestock(0.7f);
-                if (p != null && p.ShelfFill < bestFill)
-                {
-                    best = p;
-                    bestFill = p.ShelfFill;
-                    dept = d;
-                }
+                var f = all[i];
+                if (!f.HoldsProducts || f.IsBakeryShelf || f.Product == null || f.Removed) continue;
+                if (f.ClaimedBy != null || f.Product.Back.Total <= 0 || f.Fill >= 0.6f) continue;
+                if (AssignedCategory != null && f.Product.Category != AssignedCategory) continue;
+                float score = f.Fill * 40f + (f.Center - transform.position).magnitude * 0.1f;
+                if (score < bestScore) { bestScore = score; best = f; }
             }
             return best;
         }
@@ -455,121 +456,133 @@ namespace StoreManager
         {
             while (true)
             {
-                Department d;
-                var ps = FindRestock(out d);
-                if (ps == null)
+                var f = FindRestock();
+                if (f == null)
                 {
-                    Status = AssignedDept != null ? AssignedDept.Name + ": shelves full" : "Shelves full";
+                    Status = AssignedCategory != null ? AssignedCategory.Name + ": shelves full" : "Shelves full";
                     yield return StartCoroutine(IdleNear());
                     continue;
                 }
-                yield return StartCoroutine(RestockRun(d, ps, 30));
+                yield return StartCoroutine(RestockRun(f, 30));
             }
         }
 
-        IEnumerator RestockRun(Department d, ProductStock ps, int capacity)
+        /// <summary>Fetch from the back room and fill one fixture.</summary>
+        IEnumerator RestockRun(Fixture f, int capacity)
         {
+            var p = f.Product;
             idle = false;
-            claimed = ps;
-            ps.ClaimedBy = this;
-            Status = "Fetching " + ps.Def.Name;
-            yield return StartCoroutine(MoveTo(d.BackPick));
+            claimed = f;
+            f.ClaimedBy = this;
+            Status = "Fetching " + p.Name;
+            yield return StartCoroutine(MoveTo(Store.I.BackPickNear(f)));
             yield return StartCoroutine(DoWork(2f));
 
-            int space = ps.ShelfCap - ps.Shelf.Total;
-            int n = Mathf.Min(capacity, Mathf.Min(space, ps.Back.Total));
-            if (d.Active && n > 0)
+            int n = Mathf.Min(capacity, Mathf.Min(f.Def.Capacity - f.Stock.Total, p.Back.Total));
+            if (!f.Removed && f.Product == p && n > 0)
             {
-                ps.Back.MoveTo(cart, n);
-                cartProduct = ps;
-                Status = "Stocking " + ps.Def.Name;
-                yield return StartCoroutine(MoveTo(d.RestockTile(ps)));
+                p.Back.MoveTo(cart, n);
+                cartProduct = p;
+                Status = "Stocking " + p.Name;
+                yield return StartCoroutine(MoveTo(f.IsCounter ? f.Work : f.AccessTile(Store.I.Grid)));
                 yield return StartCoroutine(DoWork(1f + n * 0.2f));
-                if (d.Active)
+                if (!f.Removed && f.Product == p)
                 {
-                    int fit = Mathf.Max(0, ps.ShelfCap - ps.Shelf.Total);
-                    cart.MoveTo(ps.Shelf, Mathf.Min(fit, cart.Total));
-                    if (cart.Total > 0) cart.MoveTo(ps.Back, cart.Total);
+                    int fit = Mathf.Max(0, f.Def.Capacity - f.Stock.Total);
+                    cart.MoveTo(f.Stock, Mathf.Min(fit, cart.Total));
                 }
+                if (cart.Total > 0) cart.MoveTo(p.Back, cart.Total);
                 cart.Clear();
                 cartProduct = null;
             }
-            if (ps.ClaimedBy == this) ps.ClaimedBy = null;
+            if (f.ClaimedBy == this) f.ClaimedBy = null;
             claimed = null;
+        }
+
+        Fixture FindBakeryShelf()
+        {
+            Fixture best = null;
+            float bestFill = 0.7f;
+            var all = Store.I.Fixtures;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var f = all[i];
+                if (!f.IsBakeryShelf || f.Product == null || f.Removed || f.ClaimedBy != null) continue;
+                if (f.Fill < bestFill) { bestFill = f.Fill; best = f; }
+            }
+            return best;
         }
 
         IEnumerator BakerLoop()
         {
             while (true)
             {
-                var d = AssignedDept != null && AssignedDept.IsBakery && AssignedDept.Active
-                    ? AssignedDept : Store.I.FirstActive(DeptKind.Bakery);
-                if (d == null)
+                var oven = Store.I.NearestFixture("oven", transform.position);
+                if (oven == null)
                 {
-                    Status = "No bakery to work in";
+                    Status = "No oven to bake in";
                     yield return StartCoroutine(Idle(5f));
                     continue;
                 }
-                var ps = d.NeedsBaking(0.75f);
-                if (ps == null)
+                var shelf = FindBakeryShelf();
+                if (shelf == null)
                 {
-                    Status = "Bakery shelves full";
+                    Status = Store.I.CountFixtures("bakery_shelf") == 0 ? "No bakery shelves" : "Bakery shelves full";
                     yield return StartCoroutine(Idle(4f));
                     continue;
                 }
 
+                var p = shelf.Product;
                 idle = false;
-                claimed = ps;
-                ps.ClaimedBy = this;
-                Status = "Baking " + ps.Def.Name;
-                yield return StartCoroutine(MoveTo(d.WorkTile));
-                int batch = ps.Def.CaseSize;
+                claimed = shelf;
+                shelf.ClaimedBy = this;
+                Status = "Baking " + p.Name;
+                yield return StartCoroutine(MoveTo(oven.Work));
+                int batch = p.Def.CaseSize;
                 yield return StartCoroutine(DoWork(16f * (Specialty == Specialty.Baking ? 1f : 2.2f)));
-                if (d.Active)
+                if (!shelf.Removed && shelf.Product == p)
                 {
-                    Store.I.Economy.PayWholesale(ps.Def.Cost * batch);
-                    cart.Add(batch, ps.Life);
-                    cartProduct = ps;
-                    Status = "Putting out " + ps.Def.Name;
-                    yield return StartCoroutine(MoveTo(d.RestockTile(ps)));
+                    Store.I.Economy.PayWholesale(p.Def.Cost * batch);
+                    cart.Add(batch, p.Life);
+                    cartProduct = p;
+                    Status = "Putting out " + p.Name;
+                    yield return StartCoroutine(MoveTo(shelf.AccessTile(Store.I.Grid)));
                     yield return StartCoroutine(DoWork(1.5f + batch * 0.15f));
-                    if (d.Active) cart.MoveTo(ps.Shelf, cart.Total);
+                    if (!shelf.Removed && shelf.Product == p) cart.MoveTo(shelf.Stock, cart.Total);
                     cart.Clear();
                     cartProduct = null;
                 }
-                if (ps.ClaimedBy == this) ps.ClaimedBy = null;
+                if (shelf.ClaimedBy == this) shelf.ClaimedBy = null;
                 claimed = null;
             }
+        }
+
+        Fixture FreeCounter()
+        {
+            Fixture best = null;
+            int bestWaiting = -1;
+            var all = Store.I.Fixtures;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var f = all[i];
+                if (!f.IsCounter || f.Removed || f.Clerk != null || f.Product == null) continue;
+                if (f.Waiting.Count > bestWaiting) { bestWaiting = f.Waiting.Count; best = f; }
+            }
+            return best;
         }
 
         IEnumerator DeliLoop()
         {
             while (true)
             {
-                var d = AssignedDept != null && AssignedDept.IsCounter && AssignedDept.Active
-                    ? AssignedDept : Store.I.FirstActive(DeptKind.Counter);
-                if (d == null)
+                if (station != null && (station.Removed || station.Product == null || station.Clerk != this)) ReleaseStation();
+                if (station == null)
                 {
-                    ReleaseStation();
-                    Status = "No deli counter to work at";
-                    yield return StartCoroutine(Idle(5f));
-                    continue;
-                }
-
-                if (station == null || !d.Stations.Contains(station))
-                {
-                    ReleaseStation();
-                    station = d.FreeStationForClerk();
+                    station = FreeCounter();
                     if (station == null)
                     {
-                        // Every station is taken: keep the display full instead.
-                        var p = d.NeedsRestock(0.8f);
-                        if (p != null) yield return StartCoroutine(RestockRun(d, p, 20));
-                        else
-                        {
-                            Status = "Helping at the counter";
-                            yield return StartCoroutine(Idle(3f));
-                        }
+                        Status = Store.I.CountFixtures("deli_counter") == 0 ? "No deli counter to work at" : "Helping at the counters";
+                        yield return StartCoroutine(Idle(4f));
                         continue;
                     }
                     station.Clerk = this;
@@ -578,13 +591,14 @@ namespace StoreManager
                 if (!AtPost)
                 {
                     idle = false;
-                    Status = "Going to the counter";
-                    yield return StartCoroutine(MoveTo(station.WorkTile));
+                    Status = "Going to the " + station.Product.Name + " counter";
+                    yield return StartCoroutine(MoveTo(station.Work));
+                    if (station == null) continue;
                     AtPost = true;
-                    Face(Vector3.back);
+                    Face(new Vector3(station.QueueDir.x, 0f, station.QueueDir.y));
                 }
 
-                var c = station.Customer;
+                var c = station.Waiting.Count > 0 ? station.Waiting[0] : null;
                 if (c != null && c.AtCounter && !c.CounterServed)
                 {
                     Status = "Serving a customer";
@@ -592,20 +606,45 @@ namespace StoreManager
                     if (c != null) c.CounterServed = true;
                     continue;
                 }
-                if (c == null && d.CounterQueue.Count == 0)
+                if (station.Waiting.Count == 0)
                 {
-                    var low = d.NeedsRestock(0.5f);
-                    if (low != null)
+                    // Nobody here: go and serve at a counter where people are waiting with no clerk.
+                    var busier = BusiestUnstaffedCounter();
+                    if (busier != null)
                     {
                         ReleaseStation();
-                        yield return StartCoroutine(RestockRun(d, low, 20));
+                        station = busier;
+                        station.Clerk = this;
                         continue;
                     }
                 }
-                idle = c == null;
-                Status = "Behind the counter";
+                bool empty = station.Stock.Total == 0;
+                if ((empty || (station.Waiting.Count == 0 && station.Fill < 0.5f)) && station.Product.Back.Total > 0
+                    && (station.ClaimedBy == null || station.ClaimedBy == this))
+                {
+                    var f = station;
+                    AtPost = false;
+                    yield return StartCoroutine(RestockRun(f, 20));
+                    continue;
+                }
+                idle = station.Waiting.Count == 0;
+                Status = "Behind the " + station.Product.Name + " counter";
                 yield return null;
             }
+        }
+
+        Fixture BusiestUnstaffedCounter()
+        {
+            Fixture best = null;
+            var all = Store.I.Fixtures;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var f = all[i];
+                if (!f.IsCounter || f.Removed || f.Product == null || f.Waiting.Count == 0) continue;
+                if (f.Clerk != null && f.Clerk != this) continue;
+                if (best == null || f.Waiting.Count > best.Waiting.Count) best = f;
+            }
+            return best;
         }
 
         void ReleaseStation()

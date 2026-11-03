@@ -32,7 +32,7 @@ namespace StoreManager
 
     public class Economy
     {
-        public float Cash = 30000f;
+        public float Cash = 60000f;
         public DayLedger Today = new DayLedger { Day = 1 };
         public readonly List<DayLedger> History = new List<DayLedger>();
 

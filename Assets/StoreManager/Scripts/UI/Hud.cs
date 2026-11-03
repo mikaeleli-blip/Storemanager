@@ -4,12 +4,13 @@ using UnityEngine;
 namespace StoreManager
 {
     /// <summary>
-    /// Grey-box IMGUI interface: top bar, alerts, message log, floor panels and the
-    /// office desk screens. To be replaced by UI Toolkit later.
+    /// Grey-box IMGUI interface: top bar, alerts, message log, selection panels, build mode and the office
+    /// desk screens. To be replaced by UI Toolkit later.
     /// </summary>
     public class Hud : MonoBehaviour
     {
         public static bool PointerOverUI;
+        public static Hud I;
 
         Store store;
         readonly List<Rect> rects = new List<Rect>();
@@ -18,31 +19,55 @@ namespace StoreManager
         public Employee Selected;
         public Customer SelectedCustomer;
 
-        int tab;
+        int tab = 1;
         Vector2 scroll;
         bool minimized;
-        int hireRole, hireShift, stockDept;
-        int confirmSlot = -1;
+        int hireRole, hireShift;
         Employee confirmFire;
         float confirmTime;
         string toast = "";
         float toastTime;
+        float alertsHeight;
 
         readonly List<string> alerts = new List<string>();
         float alertTimer;
 
         GUIStyle small, bold, header, rich, center, centerShadow;
+        public GUIStyle Small { get { return small; } }
+        public GUIStyle Bold { get { return bold; } }
+        public GUIStyle Header { get { return header; } }
+        public GUIStyle Rich { get { return rich; } }
 
-        static readonly string[] Tabs = { "Overview", "Staff", "Hire", "Departments", "Stock", "Delegation", "Expansion", "Finances" };
+        static readonly string[] Tabs = { "Overview", "Build", "Products", "Staff", "Hire", "Delegation", "Expansion", "Finances" };
+        const int BuildTab = 1;
         static readonly string[] RoleNames = { "Cashier", "Stocker", "Cleaner", "Baker", "Deli Clerk", "Asst. Mgr" };
         static readonly string[] ShiftNames = { "Morning", "Evening", "Night" };
 
         static GUILayoutOption W(float w) { return GUILayout.Width(w); }
         static string Money(float v) { return Economy.Money(v); }
 
+        void Awake() { I = this; }
+
         void Start()
         {
             store = Store.I;
+        }
+
+        public void ShowTab(int t)
+        {
+            tab = t;
+            scroll = Vector2.zero;
+            minimized = false;
+            if (t == BuildTab) BuildMode.I.Open();
+            else BuildMode.I.Close();
+        }
+
+        public static void Toast(string text)
+        {
+            if (I == null || string.IsNullOrEmpty(text)) return;
+            I.toast = text;
+            I.toastTime = 3f;
+            I.store.Message(text);
         }
 
         // ------------------------------------------------------------------ input
@@ -58,7 +83,8 @@ namespace StoreManager
             for (int i = 0; i < rects.Count; i++) if (rects[i].Contains(gm)) { over = true; break; }
             PointerOverUI = over;
 
-            if (GameInput.Down(GameKey.Escape)) { Selected = null; SelectedCustomer = null; }
+            if (GameInput.Down(GameKey.Escape) && !BuildMode.I.Busy) { Selected = null; SelectedCustomer = null; }
+            if (store.Avatar.AtDesk && tab == BuildTab && !BuildMode.I.Active) BuildMode.I.Open();
             HandleWorldClicks();
 
             alertTimer -= Time.unscaledDeltaTime;
@@ -70,6 +96,7 @@ namespace StoreManager
             if (PointerOverUI || store.Cam == null) return;
             var cam = store.Cam.GetComponent<Camera>();
             if (cam == null) return;
+            if (BuildMode.I.Active && BuildMode.I.Busy) return;
 
             if (GameInput.MouseDown(0))
             {
@@ -80,9 +107,16 @@ namespace StoreManager
                 if (Physics.Raycast(ray, out hit, 500f))
                 {
                     var e = hit.collider.GetComponentInParent<Employee>();
-                    if (e != null) { Selected = e; return; }
+                    if (e != null) { Selected = e; BuildMode.I.Selected = null; return; }
                     var c = hit.collider.GetComponentInParent<Customer>();
-                    if (c != null) { SelectedCustomer = c; return; }
+                    if (c != null) { SelectedCustomer = c; BuildMode.I.Selected = null; return; }
+                }
+                if (!BuildMode.I.Active)
+                {
+                    var ground = new Plane(Vector3.up, Vector3.zero);
+                    float enter;
+                    if (ground.Raycast(ray, out enter))
+                        BuildMode.I.Selected = store.FixtureAt(StoreGrid.TileAt(ray.GetPoint(enter)));
                 }
             }
 
@@ -94,13 +128,6 @@ namespace StoreManager
                 if (ground.Raycast(ray, out enter))
                     store.Avatar.WalkTo(StoreGrid.TileAt(ray.GetPoint(enter)));
             }
-        }
-
-        void Toast(string text)
-        {
-            toast = text;
-            toastTime = 3f;
-            store.Message(text);
         }
 
         void BuildAlerts()
@@ -117,42 +144,42 @@ namespace StoreManager
                 alerts.Add("<color=#ff6655>! " + c.DisplayName + " wants the manager, " + left + " min left" + who + "</color>");
             }
 
-            if (clk.IsOpen && store.OpenLaneCount == 0) alerts.Add("<color=#ff6655>No checkout is open!</color>");
+            if (store.Lanes.Count == 0) alerts.Add("<color=#ff6655>No checkouts yet. Build some at your desk.</color>");
+            else if (clk.IsOpen && store.OpenLaneCount == 0) alerts.Add("<color=#ff6655>No checkout is open!</color>");
             else if (clk.IsOpen && store.QueuePressure()) alerts.Add("<color=#ffcc55>Long checkout queues.</color>");
 
-            for (int s = 0; s < store.SlotCount; s++)
+            int emptyFixtures = 0, carried = 0;
+            for (int i = 0; i < store.Fixtures.Count; i++)
+                if (store.Fixtures[i].HoldsProducts && store.Fixtures[i].Product == null) emptyFixtures++;
+            for (int i = 0; i < store.Products.Count; i++) if (store.Products[i].Carried) carried++;
+            if (store.Fixtures.Count > 0 && carried == 0) alerts.Add("<color=#ffcc55>No products on sale. Click a shelf at your desk to choose one.</color>");
+            if (emptyFixtures > 0) alerts.Add("<color=#ffcc55>" + emptyFixtures + " shelves have no product chosen.</color>");
+
+            if (store.CountFixtures("bakery_shelf") > 0)
             {
-                var d = store.Slots[s];
-                if (d == null || !d.Active || !d.Def.NeedsSpecialist) continue;
-                var role = d.Def.SpecialistRole;
-                if (!store.Staff.AnyScheduled(role))
-                    alerts.Add("<color=#ffcc55>" + d.Name + " has no " + Catalog.RoleName(role) + ". Hire one.</color>");
-                else if (clk.IsOpen && !store.Staff.AnyOnShift(role, d))
-                    alerts.Add("<color=#ffcc55>No " + Catalog.RoleName(role) + " on shift for " + d.Name + ".</color>");
+                if (store.CountFixtures("oven") == 0) alerts.Add("<color=#ffcc55>Bakery shelves need an oven.</color>");
+                if (!store.Staff.AnyScheduled(Role.Baker)) alerts.Add("<color=#ffcc55>Nobody bakes: hire a baker.</color>");
             }
+            if (store.CountFixtures("deli_counter") > 0 && !store.Staff.AnyScheduled(Role.DeliClerk))
+                alerts.Add("<color=#ffcc55>Deli counters need a deli clerk.</color>");
 
             int needStocking = 0, soldOut = 0;
-            for (int s = 0; s < store.SlotCount; s++)
+            for (int i = 0; i < store.Products.Count; i++)
             {
-                var d = store.Slots[s];
-                if (d == null || !d.Active) continue;
-                for (int i = 0; i < d.Products.Count; i++)
-                {
-                    var p = d.Products[i];
-                    if (p.Shelf.Total > 0) continue;
-                    if (p.Back.Total > 0) needStocking++;
-                    else if (!d.IsBakery) soldOut++;
-                }
+                var p = store.Products[i];
+                if (!p.Carried || p.ShelfTotal > 0) continue;
+                if (p.Back.Total > 0) needStocking++;
+                else if (!p.Baked && p.OnOrder == 0) soldOut++;
             }
-            if (needStocking > 0) alerts.Add("<color=#ffcc55>" + needStocking + " empty shelves with stock in the back.</color>");
-            if (soldOut > 0) alerts.Add("<color=#ff8866>" + soldOut + " products sold out. Order more.</color>");
+            if (needStocking > 0) alerts.Add("<color=#ffcc55>" + needStocking + " products sit in the back with empty shelves.</color>");
+            if (soldOut > 0) alerts.Add("<color=#ff8866>" + soldOut + " products have no stock and nothing on order.</color>");
 
             if (store.Dirt.Spills.Count >= 3)
             {
                 string extra = store.Staff.OnShiftCount(Role.Cleaner) == 0 ? " No cleaner on shift." : "";
                 alerts.Add("<color=#ffcc55>" + store.Dirt.Spills.Count + " spills on the floor." + extra + "</color>");
             }
-            if (clk.Hour >= 18 && store.OnOrderTotal == 0)
+            if (clk.Hour >= 18 && store.OnOrderTotal == 0 && carried > 0)
                 alerts.Add("<color=#ffcc55>Nothing on order for tomorrow's delivery.</color>");
             if (store.Economy.Cash < 0f) alerts.Add("<color=#ff6655>The store is in the red.</color>");
         }
@@ -171,7 +198,7 @@ namespace StoreManager
             centerShadow.normal.textColor = Color.black;
         }
 
-        void Panel(Rect r)
+        public void Panel(Rect r)
         {
             GUI.Box(r, GUIContent.none);
             GUI.Box(r, GUIContent.none);
@@ -195,6 +222,7 @@ namespace StoreManager
             DrawLog(sh);
             if (store.Avatar.AtDesk) DrawOffice(sw, sh);
             else DrawFloor(sw, sh);
+            BuildMode.I.DrawFixturePanel(this, sw, sh, 48f + alertsHeight);
             DrawSelection(sw, sh);
             DrawToast(sw, sh);
         }
@@ -222,21 +250,30 @@ namespace StoreManager
             var cam = store.Cam.GetComponent<Camera>();
             if (cam == null) return;
 
-            for (int s = 0; s < store.SlotCount; s++)
+            bool desk = store.Avatar.AtDesk;
+            if (desk)
             {
-                var d = store.Slots[s];
-                var pos = new Vector3(Layout.SlotX(s) + 6f, 2.2f, Layout.FloorStart + 0.8f);
-                if (d == null) Label3D(cam, pos, "<color=#cccccc>Empty slot " + (s + 1) + "</color>", 180f);
-                else if (d.UnderConstruction) Label3D(cam, pos, "<color=#ffd24d>" + d.Name + " (building)</color>", 200f);
-                else if (!ModelLibrary.Available) Label3D(cam, pos, d.Name, 180f);
+                Label3D(cam, new Vector3(4f, 2f, 30f), "<color=#ffe08a>Office</color>", 100f);
+                for (int i = 0; i < store.Fixtures.Count; i++)
+                {
+                    var f = store.Fixtures[i];
+                    var pos = f.Center + new Vector3(0f, 2.3f, 0f);
+                    string text;
+                    if (f.HoldsProducts)
+                    {
+                        if (f.Product == null) text = "<color=#ffcc55>(empty)</color>";
+                        else if (f.Stock.Total == 0) text = "<color=#ff7766>" + f.Product.Name + "</color>";
+                        else text = f.Product.Name;
+                    }
+                    else text = "<color=#cfe0ff>" + f.Label + "</color>";
+                    if (f == BuildMode.I.Selected) text = "<color=#9fe3ff>[ " + StripColor(text) + " ]</color>";
+                    Label3D(cam, pos, text, 160f);
+                }
             }
-            Label3D(cam, new Vector3(4f, 2f, 30f), "<color=#ffe08a>Office</color>", 100f);
-            Label3D(cam, new Vector3(store.Grid.W * 0.5f + 4f, 2.5f, 30.5f), "<color=#cfd8e6>Back room</color>", 140f);
-
-            for (int i = 0; i < store.Lanes.Count; i++)
+            else
             {
-                var lane = store.Lanes[i];
-                Label3D(cam, new Vector3(lane.CounterX + 0.5f, 2.3f, 7.8f), (i + 1).ToString(), 30f);
+                for (int i = 0; i < store.Lanes.Count; i++)
+                    Label3D(cam, store.Lanes[i].Fixture.Center + new Vector3(0f, 2.6f, 0f), (i + 1).ToString(), 30f);
             }
             for (int i = 0; i < store.Complaints.Count; i++)
             {
@@ -264,6 +301,7 @@ namespace StoreManager
             GUILayout.Label("Sales today " + Money(store.Economy.Today.Sales), W(150));
             GUILayout.Label("In store " + store.Customers.Count, W(90));
             GUILayout.FlexibleSpace();
+            if (clk.Paused) GUILayout.Label("<color=#ffcc55>PAUSED</color>", bold, W(70));
             for (int i = 0; i < GameClock.Speeds.Length; i++)
             {
                 string label = i == 0 ? "||" : GameClock.Speeds[i] + "x";
@@ -277,8 +315,9 @@ namespace StoreManager
 
         void DrawAlerts(float sw)
         {
-            if (alerts.Count == 0) return;
+            if (alerts.Count == 0) { alertsHeight = 0f; return; }
             float h = 12f + alerts.Count * 20f;
+            alertsHeight = h;
             var r = new Rect(sw - 408f, 40f, 400f, h);
             Panel(r);
             GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 8f));
@@ -322,43 +361,6 @@ namespace StoreManager
                 if (Event.current.type == EventType.Layout) rects.Add(b);
                 if (GUI.Button(b, "Sit at desk (Tab)")) av.SitDown();
             }
-
-            var tile = av.Tile;
-            int slot = Layout.SlotOf(tile.x, tile.y);
-            if (slot >= 0 && slot < store.SlotCount && store.Slots[slot] != null && store.Slots[slot].Active)
-                DrawDeptPanel(store.Slots[slot]);
-        }
-
-        void DrawDeptPanel(Department d)
-        {
-            float h = 98f + d.Products.Count * 20f;
-            var r = new Rect(8f, 40f, 390f, h);
-            Panel(r);
-            GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 8f));
-            GUILayout.Label(d.Name, header);
-            GUILayout.Label("Price level " + Mathf.RoundToInt(d.PriceMult * 100f) + "%   Sales today " + Money(d.SalesToday)
-                + "   Shelves " + Mathf.RoundToInt(d.ShelfFill * 100f) + "%", small);
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("<b>Product</b>", small, W(110));
-            GUILayout.Label("<b>Shelf</b>", small, W(70));
-            GUILayout.Label("<b>Back</b>", small, W(50));
-            GUILayout.Label("<b>Sold</b>", small, W(45));
-            GUILayout.Label("<b>Missed</b>", small, W(50));
-            GUILayout.EndHorizontal();
-            for (int i = 0; i < d.Products.Count; i++)
-            {
-                var p = d.Products[i];
-                string col = p.ShelfFill > 0.5f ? "#9dff9d" : p.ShelfFill > 0.2f ? "#ffd166" : "#ff7766";
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(p.Def.Name, small, W(110));
-                GUILayout.Label("<color=" + col + ">" + p.Shelf.Total + "/" + p.ShelfCap + "</color>", small, W(70));
-                GUILayout.Label(d.IsBakery ? "-" : p.Back.Total.ToString(), small, W(50));
-                GUILayout.Label(p.SoldToday.ToString(), small, W(45));
-                GUILayout.Label(p.MissedToday.ToString(), small, W(50));
-                GUILayout.EndHorizontal();
-            }
-            if (d.IsCounter) GUILayout.Label("Waiting at the counter: " + d.WaitingAtCounter, small);
-            GUILayout.EndArea();
         }
 
         // ------------------------------------------------------------------ selection
@@ -380,8 +382,8 @@ namespace StoreManager
             GUILayout.Label("Morale " + MoraleText(e.Morale) + "   Wage $" + e.Wage.ToString("0") + "/h (asked $" + e.AskingWage.ToString("0") + ")", rich);
             if (e.MoraleNote.Length > 0) GUILayout.Label("Morale " + e.MoraleNote, small);
             GUILayout.Label(SkillText(e), small);
-            if (e.Role == Role.Stocker || e.Role == Role.Baker || e.Role == Role.DeliClerk)
-                GUILayout.Label("Works in: " + (e.AssignedDept != null ? e.AssignedDept.Name : "anywhere"), small);
+            if (e.Role == Role.Stocker)
+                GUILayout.Label("Restocks: " + (e.AssignedCategory != null ? e.AssignedCategory.Name : "everything"), small);
             if (e.OnShift) GUILayout.Label("Busy " + Mathf.RoundToInt(e.Utilisation * 100f) + "% of this shift" + (e.WarnedThisShift ? ", warned" : ""), small);
 
             var av = store.Avatar;
@@ -431,37 +433,43 @@ namespace StoreManager
         {
             var hint = new Rect(576f, sh - 40f, Mathf.Max(300f, sw - 576f - 416f), 32f);
             Panel(hint);
-            GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f),
-                "At your desk.  WASD: move camera   Q/E: rotate   Wheel: zoom   Tab: get up", small);
+            string hintText = tab == BuildTab
+                ? "Build: pick a fixture, click to place, R rotates, right-click cancels. Click a shelf to choose its product.  WASD/Q/E/wheel: camera"
+                : "At your desk.  WASD: move camera   Q/E: rotate   Wheel: zoom   Click a shelf to see it   Tab: get up";
+            GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f), hintText, small);
 
-            if (minimized)
-            {
-                var mr = new Rect(sw * 0.5f - 160f, 40f, 320f, 34f);
-                if (Event.current.type == EventType.Layout) rects.Add(mr);
-                if (GUI.Button(mr, "Show desk screens")) minimized = false;
-                return;
-            }
-
-            float w = Mathf.Min(900f, sw - 16f);
-            var r = new Rect(sw * 0.5f - w * 0.5f, 40f, w, Mathf.Max(300f, sh - 40f - 190f));
-            Panel(r);
-            GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 12f));
+            // Tab strip (always visible at the desk)
+            float tw = Mathf.Min(760f, sw - 640f);
+            var strip = new Rect(sw * 0.5f - tw * 0.5f, 40f, tw, 34f);
+            if (tab == BuildTab) strip = new Rect(316f, 40f, Mathf.Min(760f, sw - 316f - 416f), 34f);
+            Panel(strip);
+            GUILayout.BeginArea(new Rect(strip.x + 4f, strip.y + 4f, strip.width - 8f, 28f));
             GUILayout.BeginHorizontal();
             int newTab = GUILayout.Toolbar(tab, Tabs);
-            if (newTab != tab) { tab = newTab; scroll = Vector2.zero; }
-            if (GUILayout.Button("_", W(28))) minimized = true;
-            if (GUILayout.Button("Get up", W(70))) store.Avatar.StandUp();
+            if (newTab != tab) ShowTab(newTab);
+            if (tab != BuildTab && GUILayout.Button(minimized ? "+" : "_", W(28))) minimized = !minimized;
+            if (GUILayout.Button("Get up", W(70))) { BuildMode.I.Close(); store.Avatar.StandUp(); }
             GUILayout.EndHorizontal();
-            GUILayout.Space(6f);
+            GUILayout.EndArea();
 
+            if (tab == BuildTab)
+            {
+                BuildMode.I.DrawPalette(this, sw, sh);
+                return;
+            }
+            if (minimized) return;
+
+            float w = Mathf.Min(900f, sw - 16f);
+            var r = new Rect(sw * 0.5f - w * 0.5f, 80f, w, Mathf.Max(300f, sh - 80f - 190f));
+            Panel(r);
+            GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 12f));
             scroll = GUILayout.BeginScrollView(scroll);
             switch (tab)
             {
                 case 0: OverviewTab(); break;
-                case 1: StaffTab(); break;
-                case 2: HireTab(); break;
-                case 3: DepartmentsTab(); break;
-                case 4: StockTab(); break;
+                case 2: ProductsTab(); break;
+                case 3: StaffTab(); break;
+                case 4: HireTab(); break;
                 case 5: DelegationTab(); break;
                 case 6: ExpansionTab(); break;
                 default: FinancesTab(); break;
@@ -479,7 +487,21 @@ namespace StoreManager
             GUILayout.Label("Sales " + Money(t.Sales) + "   Costs " + Money(t.Costs) + "   Profit " + Money(t.Profit), rich);
             GUILayout.Label("Average satisfaction " + (t.Customers > 0 ? MoraleText(t.AvgSatisfaction) : "-")
                 + "   (reputation moves towards this each night)", rich);
-            GUILayout.Label("Expected traffic at this reputation: about " + Mathf.RoundToInt(store.ExpectedCustomersPerDay) + " customers a day.", rich);
+            GUILayout.Label("You sell " + Mathf.RoundToInt(store.Variety * 100f) + "% of what customers ask for. Expected traffic: about "
+                + Mathf.RoundToInt(store.ExpectedCustomersPerDay) + " customers a day.", rich);
+
+            GUILayout.Space(8f);
+            GUILayout.Label("What upset customers today", header);
+            if (t.SatisfactionLost.Count == 0) GUILayout.Label("Nothing yet.", small);
+            else
+            {
+                var losses = new List<KeyValuePair<string, float>>(t.SatisfactionLost);
+                losses.Sort((a, b) => b.Value.CompareTo(a.Value));
+                float total = 0f;
+                for (int i = 0; i < losses.Count; i++) total += losses[i].Value;
+                for (int i = 0; i < losses.Count && i < 6; i++)
+                    GUILayout.Label(losses[i].Key + ": " + Mathf.RoundToInt(losses[i].Value / Mathf.Max(1f, total) * 100f) + "%", rich);
+            }
 
             GUILayout.Space(8f);
             GUILayout.Label("Staff", header);
@@ -496,20 +518,7 @@ namespace StoreManager
                 + (absent.Count > 0 ? "  Off sick: " + string.Join(", ", absent.ToArray()) : ""), rich);
 
             GUILayout.Space(8f);
-            GUILayout.Label("What upset customers today", header);
-            if (t.SatisfactionLost.Count == 0) GUILayout.Label("Nothing yet.", small);
-            else
-            {
-                var losses = new List<KeyValuePair<string, float>>(t.SatisfactionLost);
-                losses.Sort((a, b) => b.Value.CompareTo(a.Value));
-                float total = 0f;
-                for (int i = 0; i < losses.Count; i++) total += losses[i].Value;
-                for (int i = 0; i < losses.Count && i < 6; i++)
-                    GUILayout.Label(losses[i].Key + ": " + Mathf.RoundToInt(losses[i].Value / Mathf.Max(1f, total) * 100f) + "%", rich);
-            }
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Asked for but not carried (today)", header);
+            GUILayout.Label("Asked for but not sold here (today)", header);
             if (t.NotCarried.Count == 0) GUILayout.Label("Nothing yet.", small);
             foreach (var kv in t.NotCarried)
                 GUILayout.Label(kv.Key + ": " + kv.Value + " times", rich);
@@ -517,21 +526,103 @@ namespace StoreManager
             GUILayout.Space(8f);
             GUILayout.Label("Empty shelves", header);
             int shown = 0;
-            for (int s = 0; s < store.SlotCount; s++)
+            for (int i = 0; i < store.Products.Count; i++)
             {
-                var d = store.Slots[s];
-                if (d == null || !d.Active) continue;
-                for (int i = 0; i < d.Products.Count; i++)
-                {
-                    var p = d.Products[i];
-                    if (p.Shelf.Total > 0) continue;
-                    string why = d.IsBakery ? "needs baking" : p.Back.Total > 0 ? p.Back.Total + " in the back, needs stocking" : "<color=#ff7766>sold out, order more</color>";
-                    GUILayout.Label(p.Def.Name + " (" + d.Name + "): " + why, rich);
-                    shown++;
-                }
+                var p = store.Products[i];
+                if (!p.Carried || p.ShelfTotal > 0) continue;
+                string why = p.Baked ? "needs baking" : p.Back.Total > 0 ? p.Back.Total + " in the back, needs stocking"
+                    : p.OnOrder > 0 ? p.OnOrder + " on order" : "<color=#ff7766>no stock, order more</color>";
+                GUILayout.Label(p.Name + ": " + why, rich);
+                shown++;
             }
             if (shown == 0) GUILayout.Label("None.", small);
-            GUILayout.Label("Back room " + store.BackStockTotal + " / " + store.BackCapacity + " units.  On order: " + store.OnOrderTotal + " units (arrives 06:00).", small);
+            GUILayout.Label("Back room " + store.BackStockTotal + " / " + store.BackCapacity + " units.  On order: " + store.OnOrderTotal + " units.", small);
+        }
+
+        void ProductsTab()
+        {
+            GUILayout.Label("Products", header);
+            GUILayout.Label("Choose products by clicking shelves in Build. Par = how much you want on hand (shelves + back + ordered). Orders arrive with the 06:00 truck, or within an hour by express (+25%).", small);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Order everything to par", W(200)))
+            {
+                int n = store.OrderAllToPar(0f);
+                Toast(n > 0 ? "Ordered " + n + " products up to par." : "Everything on sale is at par.");
+            }
+            GUI.enabled = store.OnOrderTotal > 0 && !store.ExpressPending;
+            if (GUILayout.Button(store.ExpressPending ? "Express on its way" : "Express delivery now (+25%)", W(220)))
+                store.OrderExpress();
+            GUI.enabled = true;
+            GUILayout.Label("On order " + store.OnOrderTotal + " units (" + Money(store.OnOrderCost) + ").  Back room "
+                + store.BackStockTotal + " / " + store.BackCapacity, small);
+            GUILayout.EndHorizontal();
+            GUILayout.Space(6f);
+
+            for (int c = 0; c < store.Categories.Count; c++)
+            {
+                var cat = store.Categories[c];
+                GUILayout.BeginVertical("box");
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(cat.Name, header, W(160));
+                GUILayout.Label("Prices", W(45));
+                if (GUILayout.Button("-5%", W(42))) cat.PriceMult = Mathf.Max(0.8f, cat.PriceMult - 0.05f);
+                GUILayout.Label(Mathf.RoundToInt(cat.PriceMult * 100f) + "%", bold, W(44));
+                if (GUILayout.Button("+5%", W(42))) cat.PriceMult = Mathf.Min(1.5f, cat.PriceMult + 0.05f);
+                GUILayout.Label("Sales today " + Money(cat.SalesToday) + (cat.Def.Baked ? "   (baked on site)" : ""), W(260));
+                GUILayout.EndHorizontal();
+
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("<b>Product</b>", rich, W(110));
+                GUILayout.Label("<b>Shelves</b>", rich, W(60));
+                GUILayout.Label("<b>On shelf</b>", rich, W(70));
+                GUILayout.Label("<b>Back</b>", rich, W(50));
+                GUILayout.Label("<b>Ordered</b>", rich, W(55));
+                GUILayout.Label("<b>Par</b>", rich, W(110));
+                GUILayout.Label("<b>Sold</b>", rich, W(40));
+                GUILayout.Label("<b>Missed</b>", rich, W(50));
+                GUILayout.Label("<b>Waste</b>", rich, W(45));
+                GUILayout.EndHorizontal();
+
+                for (int i = 0; i < cat.Products.Count; i++)
+                {
+                    var p = cat.Products[i];
+                    int cs = p.Def.CaseSize;
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(p.Carried ? p.Name : "<color=#999999>" + p.Name + "</color>", rich, W(110));
+                    GUILayout.Label(p.Fixtures.Count.ToString(), W(60));
+                    if (p.Carried)
+                    {
+                        float fill = p.ShelfFill;
+                        string col = fill > 0.5f ? "#9dff9d" : fill > 0.2f ? "#ffd166" : "#ff7766";
+                        GUILayout.Label("<color=" + col + ">" + p.ShelfTotal + "/" + p.ShelfCap + "</color>", rich, W(70));
+                    }
+                    else GUILayout.Label("-", W(70));
+                    if (p.Baked)
+                    {
+                        GUILayout.Label("-", W(50));
+                        GUILayout.Label("-", W(55));
+                        GUILayout.Label("-", W(110));
+                    }
+                    else
+                    {
+                        GUILayout.Label(p.Back.Total.ToString(), W(50));
+                        GUILayout.Label(p.OnOrder.ToString(), W(55));
+                        if (GUILayout.Button("-", W(24))) p.Par = Mathf.Max(cs, p.Par - cs);
+                        GUILayout.Label(p.Par.ToString(), W(52));
+                        if (GUILayout.Button("+", W(24))) p.Par += cs;
+                    }
+                    GUILayout.Label(p.SoldToday.ToString(), W(40));
+                    GUILayout.Label(p.MissedToday.ToString(), W(50));
+                    GUILayout.Label(p.WastedLastNight.ToString(), W(45));
+                    if (!p.Baked)
+                    {
+                        if (GUILayout.Button("+1 case", W(64))) store.Order(p, cs);
+                        if (GUILayout.Button("+5", W(34))) store.Order(p, cs * 5);
+                    }
+                    GUILayout.EndHorizontal();
+                }
+                GUILayout.EndVertical();
+            }
         }
 
         void StaffTab()
@@ -541,7 +632,7 @@ namespace StoreManager
             for (int i = 0; i < staff.All.Count; i++)
                 if (staff.All[i] != null) wages += staff.All[i].Wage * 8f * (staff.All[i].Shift == Shift.Night ? 1.25f : 1f);
             GUILayout.Label(staff.All.Count + " staff. Wages about " + Money(wages) + " a day.", rich);
-            GUILayout.Label("Click Role, Shift or Works in to change them.", small);
+            GUILayout.Label("Click Role, Shift or Restocks to change them.", small);
             GUILayout.Space(4f);
 
             var list = staff.All.ToArray();
@@ -553,10 +644,10 @@ namespace StoreManager
                 if (GUILayout.Button(e.DisplayName, W(150))) Selected = e;
                 if (GUILayout.Button(Catalog.RoleName(e.Role), W(110))) staff.SetRole(e, NextRole(e));
                 if (GUILayout.Button(ShiftNames[(int)e.Shift], W(80))) staff.SetShift(e, (Shift)(((int)e.Shift + 1) % 3));
-                bool hasDept = e.Role == Role.Stocker || e.Role == Role.Baker || e.Role == Role.DeliClerk;
-                GUI.enabled = hasDept;
-                if (GUILayout.Button(hasDept ? (e.AssignedDept != null ? e.AssignedDept.Name : "Anywhere") : "-", W(120)))
-                    staff.SetDept(e, NextDept(e));
+                bool stocker = e.Role == Role.Stocker;
+                GUI.enabled = stocker;
+                if (GUILayout.Button(stocker ? (e.AssignedCategory != null ? e.AssignedCategory.Name : "Everything") : "-", W(120)))
+                    staff.SetCategory(e, NextCategory(e));
                 GUI.enabled = true;
                 if (GUILayout.Button("Raise", W(54))) { e.GiveRaise(); Toast(e.DisplayName + " now earns $" + e.Wage.ToString("0") + "/h."); }
                 bool confirming = confirmFire == e && Time.unscaledTime - confirmTime < 3f;
@@ -586,18 +677,16 @@ namespace StoreManager
             return e.Role;
         }
 
-        Department NextDept(Employee e)
+        Category NextCategory(Employee e)
         {
-            var options = new List<Department> { null };
-            for (int s = 0; s < store.SlotCount; s++)
+            var options = new List<Category> { null };
+            for (int i = 0; i < store.Categories.Count; i++)
             {
-                var d = store.Slots[s];
-                if (d == null || !d.Active) continue;
-                if (e.Role == Role.Stocker && !d.IsBakery) options.Add(d);
-                if (e.Role == Role.Baker && d.IsBakery) options.Add(d);
-                if (e.Role == Role.DeliClerk && d.IsCounter) options.Add(d);
+                var c = store.Categories[i];
+                if (c.Def.Baked || c.Def.Fixture == "deli_counter") continue;
+                options.Add(c);
             }
-            int idx = options.IndexOf(e.AssignedDept);
+            int idx = options.IndexOf(e.AssignedCategory);
             return options[(idx + 1) % options.Count];
         }
 
@@ -638,160 +727,6 @@ namespace StoreManager
             GUILayout.Label("New applicants come in every day.", small);
         }
 
-        void DepartmentsTab()
-        {
-            for (int s = 0; s < store.SlotCount; s++)
-            {
-                var d = store.Slots[s];
-                GUILayout.BeginVertical("box");
-                if (d == null)
-                {
-                    GUILayout.Label("Slot " + (s + 1) + ": empty", header);
-                    GUILayout.BeginHorizontal();
-                    for (int i = 0; i < Catalog.Departments.Count; i++)
-                    {
-                        var def = Catalog.Departments[i];
-                        if (store.FindDepartment(def) != null) continue;
-                        GUI.enabled = store.CanBuild(s, def);
-                        if (GUILayout.Button("Build " + def.Name + "\n" + Money(def.BuildCost), W(140), GUILayout.Height(40f)))
-                            store.BuildDepartment(s, def);
-                        GUI.enabled = true;
-                    }
-                    GUILayout.EndHorizontal();
-                }
-                else if (d.UnderConstruction)
-                {
-                    GUILayout.Label("Slot " + (s + 1) + ": " + d.Name + " <color=#ffd24d>(under construction, ready 06:00)</color>", header);
-                }
-                else
-                {
-                    GUILayout.Label("Slot " + (s + 1) + ": " + d.Name, header);
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label("Price level", W(80));
-                    if (GUILayout.Button("-5%", W(46))) d.PriceMult = Mathf.Max(0.8f, d.PriceMult - 0.05f);
-                    GUILayout.Label(Mathf.RoundToInt(d.PriceMult * 100f) + "%", bold, W(46));
-                    if (GUILayout.Button("+5%", W(46))) d.PriceMult = Mathf.Min(1.5f, d.PriceMult + 0.05f);
-                    GUILayout.Space(16f);
-                    GUILayout.Label("Sales today " + Money(d.SalesToday) + "   Shelves " + Mathf.RoundToInt(d.ShelfFill * 100f) + "%", W(280));
-                    GUILayout.FlexibleSpace();
-                    if (!d.IsBakery && GUILayout.Button("Order to par", W(100)))
-                    {
-                        int n = store.OrderToPar(d, 0f);
-                        Toast(n > 0 ? "Ordered " + n + " products for " + d.Name + "." : d.Name + " is already at par.");
-                    }
-                    bool confirming = confirmSlot == s && Time.unscaledTime - confirmTime < 3f;
-                    if (GUILayout.Button(confirming ? "Sure?" : "Remove", W(70)))
-                    {
-                        if (confirming) { store.Demolish(s); confirmSlot = -1; }
-                        else { confirmSlot = s; confirmTime = Time.unscaledTime; }
-                    }
-                    GUILayout.EndHorizontal();
-                    if (d.Def.NeedsSpecialist)
-                        GUILayout.Label(Catalog.RoleName(d.Def.SpecialistRole) + "s on shift now: " + store.Staff.OnShiftCount(d.Def.SpecialistRole), small);
-                    int skips = 0;
-                    for (int i = 0; i < d.Products.Count; i++) skips += d.Products[i].PriceSkipsToday;
-                    if (skips > 0) GUILayout.Label(skips + " times today a customer put something back because of the price.", small);
-                }
-                GUILayout.EndVertical();
-            }
-            if (store.ExpansionPending)
-                GUILayout.Label("Slot " + (store.SlotCount + 1) + " is being built (expansion). Ready at 06:00.", rich);
-        }
-
-        void StockTab()
-        {
-            var depts = new List<Department>();
-            var names = new List<string>();
-            for (int s = 0; s < store.SlotCount; s++)
-            {
-                var d = store.Slots[s];
-                if (d == null || d.Removed) continue;
-                depts.Add(d);
-                names.Add(d.Name);
-            }
-            if (depts.Count == 0) { GUILayout.Label("No departments."); return; }
-            stockDept = Mathf.Clamp(stockDept, 0, depts.Count - 1);
-            stockDept = GUILayout.Toolbar(stockDept, names.ToArray());
-            var dept = depts[stockDept];
-            GUILayout.Space(6f);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("<b>Product</b>", rich, W(110));
-            GUILayout.Label("<b>Shelf</b>", rich, W(70));
-            GUILayout.Label("<b>Back</b>", rich, W(55));
-            GUILayout.Label("<b>Ordered</b>", rich, W(60));
-            GUILayout.Label("<b>Par</b>", rich, W(110));
-            GUILayout.Label("<b>Sold</b>", rich, W(45));
-            GUILayout.Label("<b>Missed</b>", rich, W(55));
-            GUILayout.Label("<b>Waste</b>", rich, W(50));
-            GUILayout.Label("<b>Order</b>", rich, W(150));
-            GUILayout.EndHorizontal();
-
-            for (int i = 0; i < dept.Products.Count; i++)
-            {
-                var p = dept.Products[i];
-                int cs = p.Def.CaseSize;
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(p.Def.Name, W(110));
-                string col = p.ShelfFill > 0.5f ? "#9dff9d" : p.ShelfFill > 0.2f ? "#ffd166" : "#ff7766";
-                GUILayout.Label("<color=" + col + ">" + p.Shelf.Total + "/" + p.ShelfCap + "</color>", rich, W(70));
-                if (dept.IsBakery)
-                {
-                    GUILayout.Label("-", W(55));
-                    GUILayout.Label("-", W(60));
-                    GUILayout.Label("-", W(110));
-                }
-                else
-                {
-                    GUILayout.Label(p.Back.Total.ToString(), W(55));
-                    GUILayout.Label(p.OnOrder.ToString(), W(60));
-                    if (GUILayout.Button("-", W(24))) p.Par = Mathf.Max(cs, p.Par - cs);
-                    GUILayout.Label(p.Par.ToString(), W(52));
-                    if (GUILayout.Button("+", W(24))) p.Par += cs;
-                }
-                GUILayout.Label(p.SoldToday.ToString(), W(45));
-                GUILayout.Label(p.MissedToday.ToString(), W(55));
-                GUILayout.Label(p.WastedLastNight.ToString(), W(50));
-                if (!dept.IsBakery)
-                {
-                    if (GUILayout.Button("+1 case", W(70))) store.Order(p, cs);
-                    if (GUILayout.Button("+5", W(40))) store.Order(p, cs * 5);
-                }
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.Space(8f);
-            if (dept.IsBakery)
-            {
-                GUILayout.Label("Baked on site by bakers, nothing to order. Ingredients are paid as they bake.", small);
-            }
-            else
-            {
-                float orderCost = 0f;
-                for (int s = 0; s < store.SlotCount; s++)
-                {
-                    var d = store.Slots[s];
-                    if (d == null) continue;
-                    for (int i = 0; i < d.Products.Count; i++) orderCost += d.Products[i].OnOrder * d.Products[i].Def.Cost;
-                }
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Order " + dept.Name + " to par", W(220)))
-                {
-                    int n = store.OrderToPar(dept, 0f);
-                    Toast(n > 0 ? "Ordered " + n + " products for " + dept.Name + "." : dept.Name + " is already at par.");
-                }
-                if (GUILayout.Button("Order everything to par", W(200)))
-                {
-                    int n = store.OrderAllToPar(0f);
-                    Toast(n > 0 ? "Ordered " + n + " products." : "Everything is at par.");
-                }
-                GUILayout.EndHorizontal();
-                GUILayout.Label("Par = how much you want on hand (shelf + back + ordered). Orders arrive with the 06:00 truck and are paid on delivery.", small);
-                GUILayout.Label("On order now: " + store.OnOrderTotal + " units, about " + Money(orderCost) + ".   Back room "
-                    + store.BackStockTotal + " / " + store.BackCapacity + " units.", rich);
-            }
-        }
-
         void DelegationTab()
         {
             var am = store.Staff.Assistant;
@@ -809,7 +744,7 @@ namespace StoreManager
                 GUILayout.Label("They only do these jobs while on shift.", small);
             }
             GUILayout.Space(8f);
-            del.Ordering = GUILayout.Toggle(del.Ordering, " Ordering: order every department to par an hour before their shift ends.");
+            del.Ordering = GUILayout.Toggle(del.Ordering, " Ordering: order everything on sale to par an hour before their shift ends.");
             del.Complaints = GUILayout.Toggle(del.Complaints, " Complaints: go and calm down customers who want the manager.");
             del.Checkouts = GUILayout.Toggle(del.Checkouts, " Checkouts: open a till when queues get long.");
             del.Morale = GUILayout.Toggle(del.Morale, " Staff morale: chat with staff while walking the floor.");
@@ -819,20 +754,16 @@ namespace StoreManager
 
         void ExpansionTab()
         {
-            GUILayout.Label("Store size: " + store.SlotCount + " of " + Layout.MaxSlots + " department slots, " + store.Lanes.Count + " checkouts.", header);
+            GUILayout.Label("The shop floor is " + store.Grid.W + " m wide (" + store.SlotCount + " of " + Layout.MaxSlots + " sections).", header);
             GUILayout.Label("Back room holds " + store.BackCapacity + " units. Rent is " + Money(store.Rent) + " a day.", rich);
             GUILayout.Space(8f);
             if (store.ExpansionPending)
-            {
                 GUILayout.Label("<color=#ffd24d>Expansion under construction. Ready at 06:00.</color>", rich);
-            }
             else if (store.SlotCount >= Layout.MaxSlots)
-            {
                 GUILayout.Label("The store can't get any bigger.", rich);
-            }
             else
             {
-                GUILayout.Label("Next expansion: +1 department slot, +1 checkout, +2,000 back-room units, rent +$300/day.", rich);
+                GUILayout.Label("Next expansion: +12 m of shop floor, +2,000 back-room units, rent +$300/day.", rich);
                 GUI.enabled = store.CanExpand;
                 if (GUILayout.Button("Expand for " + Money(store.ExpansionCost), W(240), GUILayout.Height(34f)))
                     store.Expand();
@@ -870,7 +801,7 @@ namespace StoreManager
                 GUILayout.EndHorizontal();
             }
             GUILayout.Space(8f);
-            GUILayout.Label("Cash " + Money(store.Economy.Cash) + ".  Waste is stock that expired (already paid for).", small);
+            GUILayout.Label("Cash " + Money(store.Economy.Cash) + ".  Building includes fixtures bought (and refunds when sold). Waste is stock that expired.", small);
         }
     }
 }

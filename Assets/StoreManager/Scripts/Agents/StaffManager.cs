@@ -113,13 +113,12 @@ namespace StoreManager
             return n;
         }
 
-        public bool AnyOnShift(Role r, Department d)
+        public bool AnyOnShift(Role r)
         {
             for (int i = 0; i < All.Count; i++)
             {
                 var e = All[i];
-                if (e == null || e.Role != r || !e.OnShift || e.ShiftEnding) continue;
-                if (e.AssignedDept == null || e.AssignedDept == d) return true;
+                if (e != null && e.Role == r && e.OnShift && !e.ShiftEnding) return true;
             }
             return false;
         }
@@ -131,7 +130,7 @@ namespace StoreManager
             return false;
         }
 
-        public Employee Hire(Applicant a, Role role, Shift shift, Department dept)
+        public Employee Hire(Applicant a, Role role, Shift shift, Category category)
         {
             if (role == Role.AssistantManager && Assistant != null) role = Role.Stocker;
             var go = new GameObject("Staff " + a.Name);
@@ -139,7 +138,7 @@ namespace StoreManager
             e.DisplayName = a.Name;
             e.Role = role;
             e.Shift = shift;
-            e.AssignedDept = dept;
+            e.AssignedCategory = role == Role.Stocker ? category : null;
             e.Speed = a.Speed;
             e.Service = a.Service;
             e.Reliability = a.Reliability;
@@ -176,7 +175,7 @@ namespace StoreManager
         {
             if (r == Role.AssistantManager && Assistant != null && Assistant != e) return;
             e.Role = r;
-            if (r != Role.Stocker && r != Role.Baker && r != Role.DeliClerk) e.AssignedDept = null;
+            if (r != Role.Stocker) e.AssignedCategory = null;
             e.RefreshColor();
             e.Restart();
         }
@@ -189,9 +188,9 @@ namespace StoreManager
             else if (!e.OnShift && activeNow) e.StartShift(false);
         }
 
-        public void SetDept(Employee e, Department d)
+        public void SetCategory(Employee e, Category c)
         {
-            e.AssignedDept = d;
+            e.AssignedCategory = c;
             e.Restart();
         }
 
@@ -219,7 +218,7 @@ namespace StoreManager
             HireFixed(Role.Stocker, Shift.Evening, null);
         }
 
-        void HireFixed(Role r, Shift s, Department d)
+        void HireFixed(Role r, Shift s, Category d)
         {
             var a = Applicant.Generate();
             a.Specialty = Specialty.None;

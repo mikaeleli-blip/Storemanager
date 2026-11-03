@@ -6,8 +6,8 @@ namespace StoreManager
 {
     public class Customer : Agent
     {
-        class Want { public DepartmentDef Dept; public ProductDef Product; public int Qty; }
-        class Picked { public ProductStock Stock; public int Qty; }
+        class Want { public ProductDef Def; public int Qty; }
+        class Picked { public Fixture Fixture; public Product Product; public int Qty; }
 
         public const float ComplaintLimit = 50f;
 
@@ -35,7 +35,7 @@ namespace StoreManager
         // Counter
         public bool AtCounter;
         public bool CounterServed;
-        public CounterStation Station;
+        public Fixture AtFixture;
 
         bool gaveUp;
         float patience;
@@ -43,9 +43,9 @@ namespace StoreManager
         GameObject marker;
 
         readonly List<Want> wants = new List<Want>();
-        readonly List<Spill> spillsSeen = new List<Spill>();
         readonly List<Picked> picked = new List<Picked>();
-        readonly Dictionary<Department, float> deptValue = new Dictionary<Department, float>();
+        readonly Dictionary<Category, float> categoryValue = new Dictionary<Category, float>();
+        readonly List<Spill> spillsSeen = new List<Spill>();
 
         public override float MoveSpeed { get { return HurryUp ? BaseSpeed * 1.3f : BaseSpeed; } }
         public int ListSize { get { return wants.Count; } }
@@ -59,64 +59,14 @@ namespace StoreManager
             int count = Random.Range(3, 11);
             for (int i = 0; i < count; i++)
             {
-                var d = Catalog.RandomDepartment();
-                var p = Catalog.RandomProduct(d);
+                var p = Catalog.RandomProduct();
                 int qty = Random.value < 0.3f ? 2 : 1;
                 Want existing = null;
-                for (int k = 0; k < wants.Count; k++) if (wants[k].Product == p) existing = wants[k];
+                for (int k = 0; k < wants.Count; k++) if (wants[k].Def == p) existing = wants[k];
                 if (existing != null) existing.Qty += qty;
-                else wants.Add(new Want { Dept = d, Product = p, Qty = qty });
+                else wants.Add(new Want { Def = p, Qty = qty });
             }
             StartCoroutine(Run());
-        }
-
-        IEnumerator Run()
-        {
-            var store = Store.I;
-            var visit = new List<Department>();
-            for (int i = 0; i < wants.Count; i++)
-            {
-                var d = store.FindDepartment(wants[i].Dept);
-                if (d == null || !d.Active)
-                {
-                    Lose("Things you don't sell", 2f);
-                    store.Economy.Today.AddNotCarried(wants[i].Dept.Name);
-                    continue;
-                }
-                if (!visit.Contains(d)) visit.Add(d);
-            }
-            visit.Sort((a, b) => a.Slot.CompareTo(b.Slot));
-
-            Status = "Shopping";
-            for (int v = 0; v < visit.Count; v++)
-            {
-                var d = visit[v];
-                if (HurryUp || gaveUp) break;
-                if (!d.Active) { Lose("Things you don't sell", 3f); continue; }
-
-                if (d.IsCounter)
-                {
-                    yield return StartCoroutine(VisitCounter(d));
-                    continue;
-                }
-
-                for (int i = 0; i < wants.Count; i++)
-                {
-                    if (wants[i].Dept != d.Def) continue;
-                    if (HurryUp || gaveUp || !d.Active) break;
-                    var ps = d.Find(wants[i].Product);
-                    if (ps == null) continue;
-                    Status = "Looking for " + ps.Def.Name;
-                    yield return StartCoroutine(MoveTo(d.PickTile(ps)));
-                    yield return StartCoroutine(Wait(Random.Range(1.5f, 3.5f)));
-                    if (!d.Active) break;
-                    TryTake(d, ps, wants[i].Qty);
-                    if (wantsToComplain) yield return StartCoroutine(Complain());
-                }
-            }
-
-            if (!gaveUp && Items > 0) yield return StartCoroutine(Checkout());
-            yield return StartCoroutine(Leave());
         }
 
         void Lose(string reason, float points)
@@ -125,25 +75,104 @@ namespace StoreManager
             Store.I.Economy.Today.AddLoss(reason, points);
         }
 
-        void TryTake(Department d, ProductStock ps, int qty)
+        /// <summary>Best place to get a product: a stocked fixture close by, else the nearest one.</summary>
+        static Fixture BestFixture(Product p, Vector3 from)
         {
-            if (ps.Shelf.Total <= 0)
+            Fixture best = null;
+            float bestScore = float.MaxValue;
+            for (int i = 0; i < p.Fixtures.Count; i++)
             {
-                ps.MissedToday++;
+                var f = p.Fixtures[i];
+                if (f.Removed) continue;
+                float d = (f.Center - from).magnitude + (f.Stock.Total > 0 ? 0f : 1000f);
+                if (d < bestScore) { bestScore = d; best = f; }
+            }
+            return best;
+        }
+
+        IEnumerator Run()
+        {
+            var store = Store.I;
+            var todo = new List<Want>();
+            for (int i = 0; i < wants.Count; i++)
+            {
+                var p = store.ProductOf(wants[i].Def);
+                if (p == null || !p.Carried)
+                {
+                    Lose("Things you don't sell", 2f);
+                    store.Economy.Today.AddNotCarried(wants[i].Def.Category.Name);
+                    continue;
+                }
+                todo.Add(wants[i]);
+            }
+
+            Status = "Shopping";
+            while (todo.Count > 0 && !HurryUp && !gaveUp)
+            {
+                // Nearest next stop from where we are.
+                Want next = null;
+                Fixture target = null;
+                float bd = float.MaxValue;
+                for (int i = 0; i < todo.Count; i++)
+                {
+                    var p = store.ProductOf(todo[i].Def);
+                    var f = BestFixture(p, transform.position);
+                    if (f == null) continue;
+                    float d = (f.Center - transform.position).sqrMagnitude;
+                    if (d < bd) { bd = d; next = todo[i]; target = f; }
+                }
+                if (next == null)
+                {
+                    for (int i = 0; i < todo.Count; i++) Lose("Things you don't sell", 2f);
+                    break;
+                }
+                todo.Remove(next);
+                var product = store.ProductOf(next.Def);
+
+                if (target.IsCounter)
+                {
+                    yield return StartCoroutine(VisitCounter(target, product, next.Qty));
+                    continue;
+                }
+
+                Status = "Looking for " + product.Name;
+                yield return StartCoroutine(MoveTo(target.AccessTile(store.Grid)));
+                yield return StartCoroutine(Wait(Random.Range(1.5f, 3.5f)));
+                if (target.Removed || target.Product != product)
+                {
+                    var other = BestFixture(product, transform.position);
+                    if (other == null || other.IsCounter) { product.MissedToday++; Lose("Empty shelves", 4f); continue; }
+                    target = other;
+                    yield return StartCoroutine(MoveTo(target.AccessTile(store.Grid)));
+                }
+                TryTake(target, product, next.Qty);
+                if (wantsToComplain) yield return StartCoroutine(Complain());
+            }
+
+            if (!gaveUp && Items == 0 && wants.Count > 0) Lose("Found nothing to buy", 15f);
+            if (!gaveUp && Items > 0) yield return StartCoroutine(Checkout());
+            yield return StartCoroutine(Leave());
+        }
+
+        void TryTake(Fixture f, Product p, int qty)
+        {
+            if (f.Removed || f.Product != p || f.Stock.Total <= 0)
+            {
+                p.MissedToday++;
                 Lose("Empty shelves", 7f);
-                MaybeComplain("couldn't find " + ps.Def.Name);
+                MaybeComplain("couldn't find " + p.Name);
                 return;
             }
 
-            float mult = d.PriceMult;
+            float mult = p.Category.PriceMult;
             if (mult > 1.001f)
             {
                 float chance = Mathf.Clamp01(1f - (mult - 1f) * 1.3f);
                 if (Random.value > chance)
                 {
-                    ps.PriceSkipsToday++;
+                    p.PriceSkipsToday++;
                     Lose("Prices", 3f);
-                    MaybeComplain(ps.Def.Name + " is too expensive");
+                    MaybeComplain(p.Name + " is too expensive");
                     return;
                 }
                 Lose("Prices", (mult - 1f) * 4f);
@@ -153,16 +182,16 @@ namespace StoreManager
                 Satisfaction += (1f - mult) * 10f;
             }
 
-            int got = ps.Shelf.Take(qty);
+            int got = f.Stock.Take(qty);
             if (got < qty) Lose("Empty shelves", 2f);
             Items += got;
-            float value = got * ps.Price;
+            float value = got * p.Price;
             CartValue += value;
             float cur;
-            deptValue.TryGetValue(d, out cur);
-            deptValue[d] = cur + value;
-            picked.Add(new Picked { Stock = ps, Qty = got });
-            ps.SoldToday += got;
+            categoryValue.TryGetValue(p.Category, out cur);
+            categoryValue[p.Category] = cur + value;
+            picked.Add(new Picked { Fixture = f, Product = p, Qty = got });
+            p.SoldToday += got;
             Satisfaction += 1f;
 
             if (Random.value < 0.006f) Store.I.Dirt.AddSpill(transform.position);
@@ -227,83 +256,42 @@ namespace StoreManager
             Status = "Calmed down";
         }
 
-        IEnumerator VisitCounter(Department d)
+        IEnumerator VisitCounter(Fixture f, Product p, int qty)
         {
             var store = Store.I;
-            Status = "Queueing at the " + d.Name + " counter";
-            d.CounterQueue.Add(this);
+            Status = "Queueing at the " + p.Name + " counter";
+            f.Waiting.Add(this);
+            AtFixture = f;
             CounterServed = false;
-            Station = null;
             float waited = 0f;
             var spot = new Vector2Int(-99, -99);
             bool served = false;
 
             while (true)
             {
-                if (!d.Active) break;
+                if (f.Removed || f.Product != p) break;
                 if (CounterServed) { served = true; break; }
-
-                // The clerk at our station left: back to the front of the line.
-                if (Station != null && !Station.Open)
-                {
-                    if (Station.Customer == this) Station.Customer = null;
-                    Station = null;
-                    AtCounter = false;
-                    d.CounterQueue.Insert(0, this);
-                }
-                if (Station == null && d.CounterQueue.IndexOf(this) == 0)
-                {
-                    var free = d.FreeStationForCustomer();
-                    if (free != null)
-                    {
-                        Station = free;
-                        free.Customer = this;
-                        d.CounterQueue.Remove(this);
-                        Status = "At the " + d.Name + " counter";
-                    }
-                }
-
-                Vector2Int want;
-                if (Station != null) want = Station.ServiceTile;
-                else want = d.QueueTiles[Mathf.Clamp(d.CounterQueue.IndexOf(this), 0, d.QueueTiles.Count - 1)];
+                int idx = f.Waiting.IndexOf(this);
+                Vector2Int want = f.QueueSpot(Mathf.Max(0, idx), store.Grid);
                 if (want != spot) { spot = want; GoTo(spot); }
-                AtCounter = Station != null && !IsMoving;
-
+                AtCounter = idx == 0 && !IsMoving;
                 waited += Time.deltaTime;
                 if (waited > 10f) Lose("Waiting at the counter", Time.deltaTime * 0.3f);
-                bool staffed = store.CounterStaffed(d);
+                bool staffed = store.CounterStaffed(f);
                 if ((!staffed && waited > 15f) || waited > patience * 2f || (HurryUp && !staffed))
                 {
                     Lose("Waiting at the counter", 5f);
-                    MaybeComplain("nobody served at the " + d.Name + " counter");
+                    MaybeComplain("nobody served at the counter");
                     break;
                 }
                 yield return null;
             }
 
-            d.CounterQueue.Remove(this);
-            if (Station != null && Station.Customer == this) Station.Customer = null;
-            Station = null;
+            f.Waiting.Remove(this);
             AtCounter = false;
-
-            if (served)
-            {
-                for (int i = 0; i < wants.Count; i++)
-                {
-                    if (wants[i].Dept != d.Def) continue;
-                    var ps = d.Find(wants[i].Product);
-                    if (ps != null) TryTake(d, ps, wants[i].Qty);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < wants.Count; i++)
-                {
-                    if (wants[i].Dept != d.Def) continue;
-                    var ps = d.Find(wants[i].Product);
-                    if (ps != null) ps.MissedToday++;
-                }
-            }
+            AtFixture = null;
+            if (served) TryTake(f, p, qty);
+            else p.MissedToday++;
             if (wantsToComplain) yield return StartCoroutine(Complain());
             Status = "Shopping";
         }
@@ -331,7 +319,7 @@ namespace StoreManager
                     {
                         Status = "Waiting for a checkout to open";
                         WaitingForLane = true;
-                        if (!IsMoving && Tile.y > 11) GoTo(store.CheckoutWaitTile());
+                        if (!IsMoving && noLaneTime < 0.01f) GoTo(store.CheckoutWaitTile());
                         noLaneTime += Time.deltaTime;
                         Lose("No open checkout", Time.deltaTime * 0.4f);
                         if (noLaneTime > patience * 1.5f)
@@ -380,7 +368,7 @@ namespace StoreManager
             if (Paid) return;
             Paid = true;
             Store.I.Economy.Sale(CartValue, Items);
-            foreach (var kv in deptValue) kv.Key.SalesToday += kv.Value;
+            foreach (var kv in categoryValue) kv.Key.SalesToday += kv.Value;
             if (cashier != null)
             {
                 float service = (cashier.Service - 5f) * 1.5f;
@@ -398,16 +386,14 @@ namespace StoreManager
         {
             for (int i = 0; i < picked.Count; i++)
             {
-                var p = picked[i];
-                p.Stock.SoldToday -= p.Qty;
-                if (p.Stock.Dept.Active)
-                {
-                    int life = p.Stock.Life > 0 ? Mathf.Max(1, p.Stock.Life / 2) : -1;
-                    p.Stock.Shelf.Add(p.Qty, life);
-                }
+                var pk = picked[i];
+                pk.Product.SoldToday -= pk.Qty;
+                int life = pk.Product.Life > 0 ? Mathf.Max(1, pk.Product.Life / 2) : -1;
+                if (!pk.Fixture.Removed && pk.Fixture.Product == pk.Product) pk.Fixture.Stock.Add(pk.Qty, life);
+                else if (!pk.Product.Baked) pk.Product.Back.Add(pk.Qty, life);
             }
             picked.Clear();
-            deptValue.Clear();
+            categoryValue.Clear();
             Items = 0;
             CartValue = 0f;
             Lose("Walked out", 20f);
@@ -433,7 +419,6 @@ namespace StoreManager
             if (dirtTimer >= 1f)
             {
                 dirtTimer = 0f;
-                // Each spill a customer walks past upsets them once (up to four).
                 if (spillsSeen.Count < 4)
                 {
                     var s = Store.I.Dirt.NearestWithin(transform.position, 2.5f);

@@ -83,31 +83,57 @@ namespace StoreManager
         }
     }
 
-    /// <summary>One product in one department: shelf stock, back-room stock and today's numbers.</summary>
-    public class ProductStock
+    /// <summary>A category in this store: its price level and today's sales.</summary>
+    public class Category
+    {
+        public readonly CategoryDef Def;
+        public float PriceMult = 1f;
+        public float SalesToday;
+        public readonly List<Product> Products = new List<Product>();
+
+        public Category(CategoryDef def) { Def = def; }
+        public string Name { get { return Def.Name; } }
+    }
+
+    /// <summary>
+    /// One product in this store: back-room stock, orders and today's numbers. Shelf stock lives on the
+    /// fixtures the player assigned it to.
+    /// </summary>
+    public class Product
     {
         public readonly ProductDef Def;
-        public readonly Department Dept;
-        public readonly StockPile Shelf = new StockPile();
+        public readonly Category Category;
         public readonly StockPile Back = new StockPile();
+        public readonly List<Fixture> Fixtures = new List<Fixture>();
         public int OnOrder;
         public int Par;
-        public int ShelfCap;
-        public int ShelfIndex;
-        public Employee ClaimedBy;
 
         public int SoldToday, MissedToday, PriceSkipsToday, WastedLastNight;
 
-        public ProductStock(ProductDef def, Department dept)
+        public Product(ProductDef def, Category category)
         {
             Def = def;
-            Dept = dept;
+            Category = category;
         }
 
-        public float Price { get { return Def.BasePrice * Dept.PriceMult; } }
+        public string Name { get { return Def.Name; } }
+        public bool Carried { get { return Fixtures.Count > 0; } }
+        public bool Baked { get { return Category.Def.Baked; } }
+        public float Price { get { return Def.BasePrice * Category.PriceMult; } }
         public int Life { get { return Def.ShelfLifeDays > 0 ? Def.ShelfLifeDays : -1; } }
-        public float ShelfFill { get { return ShelfCap > 0 ? Mathf.Clamp01(Shelf.Total / (float)ShelfCap) : 0f; } }
-        public int OnHand { get { return Shelf.Total + Back.Total; } }
+
+        public int ShelfTotal
+        {
+            get { int t = 0; for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Stock.Total; return t; }
+        }
+
+        public int ShelfCap
+        {
+            get { int t = 0; for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Def.Capacity; return t; }
+        }
+
+        public float ShelfFill { get { int c = ShelfCap; return c > 0 ? Mathf.Clamp01(ShelfTotal / (float)c) : 0f; } }
+        public int OnHand { get { return ShelfTotal + Back.Total; } }
 
         public void ResetDaily()
         {

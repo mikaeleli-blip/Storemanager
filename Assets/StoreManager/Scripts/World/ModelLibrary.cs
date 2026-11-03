@@ -73,32 +73,41 @@ namespace StoreManager
                 palette.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
             }
 
-            glass = new Material(shader) { name = "Store Glass" };
-            var gc = new Color(0.78f, 0.92f, 1f, 0.22f);
+            glass = Transparent(new Color(0.78f, 0.92f, 1f, 0.22f), 0.9f);
+            glass.name = "Store Glass";
+        }
+
+        /// <summary>A see-through material (glass, build-mode ghosts).</summary>
+        public static Material Transparent(Color c, float smoothness = 0.5f)
+        {
+            var shader = LitShader();
+            bool urp = shader != null && shader.name.StartsWith("Universal");
+            var m = new Material(shader) { name = "Transparent" };
             if (urp)
             {
-                glass.SetFloat("_Surface", 1f);
-                glass.SetFloat("_Blend", 0f);
-                glass.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-                glass.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-                glass.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
-                glass.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
-                glass.SetFloat("_ZWrite", 0f);
-                glass.SetFloat("_Smoothness", 0.9f);
-                glass.SetColor("_BaseColor", gc);
-                glass.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                glass.SetOverrideTag("RenderType", "Transparent");
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_Blend", 0f);
+                m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+                m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+                m.SetFloat("_ZWrite", 0f);
+                m.SetFloat("_Smoothness", smoothness);
+                m.SetColor("_BaseColor", c);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.SetOverrideTag("RenderType", "Transparent");
             }
             else
             {
-                glass.SetFloat("_Mode", 3f);
-                glass.SetInt("_SrcBlend", (int)BlendMode.One);
-                glass.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-                glass.SetInt("_ZWrite", 0);
-                glass.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+                m.SetFloat("_Mode", 3f);
+                m.SetInt("_SrcBlend", (int)BlendMode.One);
+                m.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+                m.SetInt("_ZWrite", 0);
+                m.EnableKeyword("_ALPHAPREMULTIPLY_ON");
             }
-            glass.color = gc;
-            glass.renderQueue = 3000;
+            m.color = c;
+            m.renderQueue = 3000;
+            return m;
         }
 
         /// <summary>

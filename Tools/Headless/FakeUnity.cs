@@ -8,7 +8,7 @@ using System.Reflection;
 namespace UnityEngine
 {
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
-    public enum KeyCode { None, W, A, S, D, Q, E, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4 }
+    public enum KeyCode { None, W, A, S, D, Q, E, R, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4 }
     public enum CameraClearFlags { Skybox = 1, SolidColor = 2, Depth = 3, Nothing = 4 }
     public enum LightType { Spot, Directional, Point }
     public enum LightShadows { None, Hard, Soft }
@@ -76,6 +76,12 @@ namespace UnityEngine
     {
         public int x, y;
         public Vector2Int(int x, int y) { this.x = x; this.y = y; }
+        public static Vector2Int operator +(Vector2Int a, Vector2Int b) { return new Vector2Int(a.x + b.x, a.y + b.y); }
+        public static Vector2Int operator -(Vector2Int a, Vector2Int b) { return new Vector2Int(a.x - b.x, a.y - b.y); }
+        public static Vector2Int right { get { return new Vector2Int(1, 0); } }
+        public static Vector2Int left { get { return new Vector2Int(-1, 0); } }
+        public static Vector2Int up { get { return new Vector2Int(0, 1); } }
+        public static Vector2Int down { get { return new Vector2Int(0, -1); } }
         public static bool operator ==(Vector2Int a, Vector2Int b) { return a.x == b.x && a.y == b.y; }
         public static bool operator !=(Vector2Int a, Vector2Int b) { return !(a == b); }
         public bool Equals(Vector2Int o) { return this == o; }
@@ -391,6 +397,12 @@ namespace UnityEngine
             set { position = parentField != null ? parentField.position + value : value; }
         }
         public void SetParent(Transform p, bool worldPositionStays) { parentField = p; }
+        public Transform Find(string n)
+        {
+            foreach (var go in Engine.AllObjects)
+                if (!go.destroyed && go.transform.parentField == this && go.name == n) return go.transform;
+            return null;
+        }
     }
 
     public class Behaviour : Component

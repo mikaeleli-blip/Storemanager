@@ -3,8 +3,8 @@ using UnityEngine;
 namespace StoreManager
 {
     /// <summary>
-    /// Builds the tile grid and the store's visuals for the current size. Uses the Blender models from
-    /// ModelLibrary; falls back to coloured primitives when they aren't available.
+    /// Builds the tile grid and the building (walls, office, back room, outside), plus the visuals of every
+    /// placed fixture. Uses the Blender models from ModelLibrary; falls back to coloured primitives without them.
     /// </summary>
     public class StoreBuilder
     {
@@ -14,33 +14,22 @@ namespace StoreManager
 
         static readonly Color StreetCol = new Color(0.32f, 0.33f, 0.35f);
         static readonly Color LobbyCol = new Color(0.86f, 0.84f, 0.8f);
-        static readonly Color EmptySlotCol = new Color(0.62f, 0.62f, 0.6f);
         static readonly Color BackCol = new Color(0.55f, 0.56f, 0.58f);
         static readonly Color OfficeCol = new Color(0.55f, 0.42f, 0.3f);
         static readonly Color DockCol = new Color(0.25f, 0.25f, 0.27f);
         static readonly Color WallCol = new Color(0.93f, 0.92f, 0.88f);
         static readonly Color RackCol = new Color(0.3f, 0.38f, 0.5f);
-        static readonly Color CounterCol = new Color(0.25f, 0.27f, 0.3f);
         static readonly Color DeskCol = new Color(0.4f, 0.27f, 0.15f);
-        static readonly Color ScaffoldCol = new Color(0.95f, 0.75f, 0.1f);
 
-        // Shelf heights of each fixture model (match Tools/Blender/fixtures.py).
-        static readonly float[] ShelfLevels = { 0.12f, 0.52f, 0.92f, 1.32f };
-        static readonly float[] BakeryLevels = { 0.12f, 0.62f, 1.12f };
-        const float ProducePivotY = 0.8f, ProduceTilt = -14f;
+        const float ProduceTilt = -14f;
 
         public StoreBuilder(Store store) { this.store = store; }
 
         static bool Models { get { return ModelLibrary.Available; } }
 
-        public static Vector2Int BackPickFor(int slot, int width)
-        {
-            return new Vector2Int(Mathf.Clamp(Layout.SlotX(slot) + 6, 10, width - 2), 28);
-        }
-
         // ------------------------------------------------------------------ grid
 
-        /// <summary>Rebuilds everything: grid, walls, checkouts and every department.</summary>
+        /// <summary>Rebuilds the grid and the building. Call Store.ReapplyFixtures afterwards.</summary>
         public void BuildAll()
         {
             int slots = store.SlotCount;
@@ -67,12 +56,6 @@ namespace StoreManager
             for (int x = W - 6; x <= W - 3; x++) g.SetZone(x, Layout.RearWall, Zone.Dock);
             g.FillZone(0, Layout.DockRow, W - 1, Layout.DockRow, Zone.Dock);
 
-            for (int i = 0; i < store.Lanes.Count; i++)
-            {
-                int cx = store.Lanes[i].CounterX;
-                g.SetBlocked(cx, 6, true);
-                g.SetBlocked(cx, 7, true);
-            }
             for (int x = 2; x <= 4; x++) g.SetBlocked(x, 31, true);          // desk
             for (int x = 10; x <= W - 2; x++)                                  // racks
             {
@@ -80,11 +63,10 @@ namespace StoreManager
                 g.SetBlocked(x, 29, true);
                 g.SetBlocked(x, 32, true);
             }
-            // furniture and decor
             BlockAll(g, new[] { new Vector2Int(0, 33), new Vector2Int(1, 33), new Vector2Int(7, 33), new Vector2Int(0, 27),
-                                new Vector2Int(7, 27), new Vector2Int(7, 28), new Vector2Int(7, 29), new Vector2Int(0, 4), new Vector2Int(1, 4), new Vector2Int(0, 5),
-                                new Vector2Int(1, 5), new Vector2Int(0, 6), new Vector2Int(1, 6), new Vector2Int(6, 4),
-                                new Vector2Int(0, 10), new Vector2Int(W - 1, 4), new Vector2Int(W - 2, 33), new Vector2Int(W - 1, 33),
+                                new Vector2Int(7, 27), new Vector2Int(7, 28), new Vector2Int(7, 29), new Vector2Int(0, 4),
+                                new Vector2Int(1, 4), new Vector2Int(0, 5), new Vector2Int(1, 5), new Vector2Int(0, 6),
+                                new Vector2Int(1, 6), new Vector2Int(6, 4), new Vector2Int(W - 2, 33), new Vector2Int(W - 1, 33),
                                 new Vector2Int(W - 2, 27), new Vector2Int(W - 1, 27) });
 
             if (staticRoot != null) Object.Destroy(staticRoot.gameObject);
@@ -92,12 +74,6 @@ namespace StoreManager
             staticRoot.SetParent(store.transform, false);
             if (Models) BuildStaticModels(W, slots);
             else BuildStaticPrimitives(W, slots);
-
-            for (int s = 0; s < store.Slots.Length; s++)
-            {
-                var d = store.Slots[s];
-                if (s < slots && d != null) BuildDepartment(d);
-            }
         }
 
         static void BlockAll(StoreGrid g, Vector2Int[] tiles)
@@ -122,17 +98,13 @@ namespace StoreManager
         {
             var r = staticRoot;
 
-            // ground
             Floor(r, "Car Park", "asphalt", -16f, -18f, W + 32f, 18f, Color.white);
             Floor(r, "Sidewalk", "sidewalk", -16f, 0f, W + 32f, 3.4f, Color.white);
             Floor(r, "Shop Floor", "floor_store", 0f, 3f, W, 23f, Color.white);
             Floor(r, "Back Room", "floor_back", Layout.OfficeWallX, Layout.BackWall, W - Layout.OfficeWallX, 9f, Color.white);
             Floor(r, "Office Floor", "floor_office", 0f, Layout.BackWall, Layout.OfficeWallX, 9f, Color.white);
             Floor(r, "Yard", "asphalt", -16f, Layout.RearWall, W + 32f, 14f, new Color(0.85f, 0.85f, 0.85f));
-            for (int s = 0; s < slots; s++)
-                Floor(r, "Slot Floor " + s, "floor_store", Layout.SlotX(s) + 0.1f, Layout.FloorStart, Layout.SlotWidth - 0.2f, 14f, new Color(0.82f, 0.82f, 0.8f), 0.012f);
 
-            // car park lines, cars, trees
             var stripe = new Color(0.92f, 0.92f, 0.88f);
             for (float x = -10f; x <= W + 10f; x += 2.8f)
                 Mats.Box("Bay Line", r, x, -6.5f, 0.12f, 4.6f, 0.001f, 0.01f, stripe);
@@ -151,7 +123,6 @@ namespace StoreManager
             M("Bench", r, -2.5f, 0f, 2.6f, 180f);
             M("Bench", r, W + 2.5f, 0f, 2.6f, 180f);
 
-            // front wall with windows and the entrance
             for (int x = 0; x < W; x++)
             {
                 if (x >= 2 && x <= 5) continue;
@@ -160,7 +131,6 @@ namespace StoreManager
             M("Entrance", r, 4f, 0f, 3.5f);
             M("StoreSign", r, Mathf.Max(13f, W * 0.5f + 2f), 1.85f, 3.5f);
 
-            // side walls
             for (int z = 3; z <= 34; z++)
             {
                 M("Wall", r, -0.15f, 0f, z + 0.5f, 90f);
@@ -171,7 +141,6 @@ namespace StoreManager
             M("WallPost", r, -0.15f, 0f, 34.5f);
             M("WallPost", r, W + 0.15f, 0f, 34.5f);
 
-            // back wall with staff doorways
             for (int x = 0; x < W; x++)
             {
                 int local = x % Layout.SlotWidth;
@@ -184,14 +153,12 @@ namespace StoreManager
                 M("WallPost", r, Layout.SlotX(s) + 12f, 0f, Layout.BackWall + 0.5f);
             }
 
-            // office wall (door at z = 30)
             for (int z = Layout.BackStart; z <= Layout.BackEnd; z++)
             {
                 if (z == 30) continue;
                 M("Wall", r, Layout.OfficeWallX + 0.5f, 0f, z + 0.5f, 90f);
             }
 
-            // rear wall and loading dock
             for (int x = 0; x < W; x++)
             {
                 if (x >= W - 6 && x <= W - 3) continue;
@@ -199,25 +166,9 @@ namespace StoreManager
             }
             M("DockDoor", r, W - 4f, 0f, Layout.RearWall + 0.5f);
 
-            // checkouts
-            for (int i = 0; i < store.Lanes.Count; i++)
-            {
-                var lane = store.Lanes[i];
-                float cx = lane.CounterX + 0.5f;
-                M("Checkout", r, cx, 0f, 7f);
-                M("LanePole", r, cx, 0f, 8.3f);
-                var light = Mats.Prim(PrimitiveType.Sphere, "Lane Light " + (i + 1), r, new Vector3(cx, 2.2f, 8.3f),
-                    new Vector3(0.2f, 0.2f, 0.2f), Color.red, false);
-                lane.Light = light.GetComponent<Renderer>();
-            }
-
-            // lobby
             M("CartCorral", r, 0.9f, 0f, 4.6f);
             M("BasketStack", r, 6.5f, 0f, 4.5f);
-            M("Plant", r, 0.6f, 0f, 10.6f);
-            M("Plant", r, W - 0.6f, 0f, 4.6f);
 
-            // office
             M("Desk", r, 3.5f, 0f, 31.5f);
             M("OfficeChair", r, 3.5f, 0f, 30.55f);
             M("FilingCabinet", r, 0.5f, 0f, 33.5f);
@@ -227,7 +178,6 @@ namespace StoreManager
             M("Plant", r, 0.6f, 0f, 27.6f);
             M("Sofa", r, 7.35f, 0f, 28.6f, 90f);
 
-            // back room racks and pallets
             for (int row = 0; row < 2; row++)
             {
                 int z = row == 0 ? 29 : 32;
@@ -252,9 +202,7 @@ namespace StoreManager
             const float fy = -0.05f, fh = 0.05f;
 
             Mats.Box("Street", r, -6f, -6f, W + 12f, 9f, fy, fh, StreetCol);
-            Mats.Box("Lobby", r, 0f, 3f, W, 9f, fy, fh, LobbyCol);
-            for (int s = 0; s < slots; s++)
-                Mats.Box("Slot Floor " + s, r, Layout.SlotX(s), Layout.FloorStart, Layout.SlotWidth, 14f, fy, fh, EmptySlotCol);
+            Mats.Box("Shop Floor", r, 0f, 3f, W, 23f, fy, fh, LobbyCol);
             Mats.Box("Back Room", r, Layout.OfficeWallX, Layout.BackWall, W - Layout.OfficeWallX, 9f, fy, fh, BackCol);
             Mats.Box("Office Floor", r, 0f, Layout.BackWall, Layout.OfficeWallX, 9f, fy, fh, OfficeCol);
             Mats.Box("Dock", r, -6f, Layout.RearWall, W + 12f, 8f, fy, fh, DockCol);
@@ -270,15 +218,6 @@ namespace StoreManager
             Mats.Box("Wall Office B", r, Layout.OfficeWallX + 0.35f, 31f, wt, 3f, 0f, wh, WallCol);
             Mats.Box("Wall Rear L", r, 0f, Layout.RearWall + 0.35f, W - 6f, wt, 0f, wh, WallCol);
             Mats.Box("Wall Rear R", r, W - 2f, Layout.RearWall + 0.35f, 2f, wt, 0f, wh, WallCol);
-
-            for (int i = 0; i < store.Lanes.Count; i++)
-            {
-                var lane = store.Lanes[i];
-                int cx = lane.CounterX;
-                Mats.Box("Checkout " + (i + 1), r, cx + 0.1f, 6f, 0.8f, 2f, 0f, 0.9f, CounterCol, true);
-                var light = Mats.Box("Checkout Light " + (i + 1), r, cx + 0.3f, 7.6f, 0.4f, 0.4f, 1.6f, 0.4f, Color.red);
-                lane.Light = light.GetComponent<Renderer>();
-            }
 
             Mats.Box("Desk", r, 2f, 31f, 3f, 1f, 0f, 0.8f, DeskCol, true);
             for (int row = 0; row < 2; row++)
@@ -299,218 +238,169 @@ namespace StoreManager
             Truck.SetActive(false);
         }
 
-        // ------------------------------------------------------------------ departments
+        // ------------------------------------------------------------------ fixtures
 
-        /// <summary>Lays out one department in its slot (obstacles, shelves, counters) and builds its visuals.</summary>
-        public void BuildDepartment(Department d)
+        static Color KindColor(FixtureDef d)
         {
-            var g = store.Grid;
-            int x0 = Layout.SlotX(d.Slot);
-            g.ClearBlocked(x0, Layout.FloorStart, x0 + Layout.SlotWidth - 1, Layout.FloorEnd);
-
-            if (d.Root != null) Object.Destroy(d.Root.gameObject);
-            d.Root = new GameObject("Dept " + d.Name).transform;
-            d.Root.SetParent(store.transform, false);
-            d.Shelves.Clear();
-            d.QueueTiles.Clear();
-            d.FloorTiles.Clear();
-            d.ClearRows();
-            d.BackPick = BackPickFor(d.Slot, g.W);
-            bool models = Models;
-
-            if (models)
+            switch (d.Id)
             {
-                Floor(d.Root, "Floor", "floor_store", x0 + 0.1f, Layout.FloorStart, Layout.SlotWidth - 0.2f, 14f,
-                    Color.Lerp(d.Def.Color, Color.white, 0.62f), 0.024f);
-                M("Sign_" + d.Def.Id, d.Root, x0 + 5f, 1.62f, Layout.BackWall + 0.33f);
+                case "fridge": return new Color(0.5f, 0.7f, 0.9f);
+                case "produce": return new Color(0.55f, 0.4f, 0.25f);
+                case "bakery_shelf": return new Color(0.8f, 0.65f, 0.45f);
+                case "deli_counter": return new Color(0.85f, 0.4f, 0.35f);
+                case "oven": return new Color(0.45f, 0.45f, 0.48f);
+                case "checkout": return new Color(0.25f, 0.27f, 0.3f);
+                default: return new Color(0.85f, 0.86f, 0.88f);
             }
-            else
-            {
-                Color floor = Color.Lerp(d.Def.Color, Color.white, 0.55f);
-                Mats.Box("Floor", d.Root, x0, Layout.FloorStart, Layout.SlotWidth, 14f, -0.04f, 0.05f, floor);
-            }
+        }
 
-            if (d.UnderConstruction)
+        /// <summary>Spawns the fixture's model segments under parent. Returns false if a model was missing.</summary>
+        bool SpawnFixtureModel(FixtureDef def, Vector2Int origin, int rot, Transform parent)
+        {
+            float yaw = Placement.Yaw(rot);
+            bool ok = true;
+            for (int i = 0; i < def.Segments.Length; i++)
             {
-                for (int i = 0; i < 6; i++)
+                var p = Placement.Point(def, origin, rot, def.Segments[i].x, def.Segments[i].y);
+                if (M(def.Model, parent, p.x, 0f, p.z, yaw) == null) ok = false;
+            }
+            return ok;
+        }
+
+        public void BuildFixture(Fixture f)
+        {
+            if (f.Root != null) Object.Destroy(f.Root.gameObject);
+            f.Root = new GameObject(f.Def.Name + " " + f.Id).transform;
+            f.Root.SetParent(store.transform, false);
+            f.Rows.Clear();
+            f.ResetVisuals();
+            float yaw = Placement.Yaw(f.Rot);
+
+            bool models = Models && SpawnFixtureModel(f.Def, f.Origin, f.Rot, f.Root);
+            if (!models)
+            {
+                for (int i = 0; i < f.Tiles.Count; i++)
                 {
-                    float px = x0 + 1.5f + (i % 3) * 3.5f;
-                    float pz = 15f + (i / 3) * 5f;
-                    Mats.Box("Scaffold", d.Root, px, pz, 1.2f, 1.2f, 0f, 2.2f, ScaffoldCol);
-                    if (models && i % 2 == 0) M("Pallet", d.Root, px + 2.2f, 0f, pz + 0.6f, 90f * i);
+                    var t = f.Tiles[i];
+                    float h = f.IsCheckout ? 0.9f : f.IsOven ? 1.8f : f.IsCounter ? 1.1f : 1.3f;
+                    Mats.Box("Block", f.Root, t.x + 0.08f, t.y + 0.08f, 0.84f, 0.84f, 0f, h, KindColor(f.Def));
                 }
-                CollectFloorTiles(d, x0);
-                return;
             }
 
-            Color shelfCol = Color.Lerp(d.Def.Color, Color.black, 0.25f);
-            switch (d.Def.Kind)
+            if (f.IsCheckout)
             {
-                case DeptKind.Shelves:
-                    AddShelf(d, x0 + 2);
-                    AddShelf(d, x0 + 5);
-                    AddShelf(d, x0 + 8);
-                    d.ShelfCapacity = 300;
-                    break;
-
-                case DeptKind.Bakery:
-                    AddShelf(d, x0 + 2);
-                    AddShelf(d, x0 + 5);
-                    for (int z = 21; z <= 23; z++) { g.SetBlocked(x0 + 9, z, true); g.SetBlocked(x0 + 10, z, true); }
-                    if (models) M("Oven", d.Root, x0 + 10f, 0f, 22.5f);
-                    else Mats.Box("Ovens", d.Root, x0 + 9.05f, 21.05f, 1.9f, 2.9f, 0f, 1.8f, new Color(0.35f, 0.3f, 0.28f), true);
-                    d.WorkTile = new Vector2Int(x0 + 8, 22);
-                    d.ShelfCapacity = 120;
-                    break;
-
-                case DeptKind.Counter:
-                    for (int x = x0 + 1; x <= x0 + 10; x++) g.SetBlocked(x, 20, true);
-                    for (int x = x0 + 2; x <= x0 + 9; x++) g.SetBlocked(x, 24, true);
-                    if (!models)
-                    {
-                        Mats.Box("Counter", d.Root, x0 + 1.05f, 20.05f, 9.9f, 0.9f, 0f, 1.1f, shelfCol, true);
-                        Mats.Box("Cold Room", d.Root, x0 + 2.05f, 24.05f, 7.9f, 0.9f, 0f, 2f, new Color(0.75f, 0.85f, 0.9f), true);
-                    }
-                    d.WorkTile = new Vector2Int(x0 + 5, 21);
-                    d.ServiceTile = new Vector2Int(x0 + 5, 19);
-                    for (int z = 17; z >= 13; z--) d.QueueTiles.Add(new Vector2Int(x0 + 5, z));
-                    if (d.Stations.Count == 0)
-                    {
-                        for (int i = 0; i < 3; i++)
-                        {
-                            int sx = x0 + 2 + i * 3;
-                            d.Stations.Add(new CounterStation { ServiceTile = new Vector2Int(sx, 19), WorkTile = new Vector2Int(sx, 21) });
-                        }
-                    }
-                    d.ShelfCapacity = 160;
-                    break;
+                var p = Placement.Point(f.Def, f.Origin, f.Rot, 0.5f, 1.85f);
+                if (models) M("LanePole", f.Root, p.x, 0f, p.z, yaw);
+                var light = Mats.Prim(PrimitiveType.Sphere, "Lane Light", f.Root, new Vector3(p.x, models ? 2.2f : 1.4f, p.z),
+                    new Vector3(0.2f, 0.2f, 0.2f), Color.red, false);
+                if (f.Lane != null) f.Lane.Light = light.GetComponent<Renderer>();
             }
-
-            int count = Mathf.Max(1, d.Products.Count);
-            for (int i = 0; i < d.Products.Count; i++)
+            if (f.IsCounter && models)
             {
-                var p = d.Products[i];
-                p.ShelfCap = d.ShelfCapacity / count;
-                p.ShelfIndex = d.Shelves.Count > 0 ? i % d.Shelves.Count : 0;
-                if (d.Shelves.Count > 0) d.Shelves[p.ShelfIndex].Products.Add(p);
+                var p = Placement.Point(f.Def, f.Origin, f.Rot, 1.5f, 0.75f);
+                M("DeliScale", f.Root, p.x, 0f, p.z, yaw + 180f);
             }
-
-            if (models)
-            {
-                if (d.IsCounter) BuildCounterModels(d, x0);
-                else for (int i = 0; i < d.Shelves.Count; i++) BuildShelfModels(d, d.Shelves[i]);
-                d.ShuffleRows();
-            }
-            else
-            {
-                for (int i = 0; i < d.Shelves.Count; i++) BuildShelfBar(d, d.Shelves[i], shelfCol);
-            }
-
-            CollectFloorTiles(d, x0);
-            d.UpdateVisuals();
+            BuildStockRows(f);
         }
 
-        const int ShelfZ0 = 14, ShelfZ1 = 23;
-
-        void AddShelf(Department d, int x)
+        /// <summary>(Re)builds the product rows on a shelf or counter for its current product.</summary>
+        public void BuildStockRows(Fixture f)
         {
-            var g = store.Grid;
-            var shelf = new ShelfUnit { Column = x };
-            for (int z = ShelfZ0; z <= ShelfZ1; z++)
+            if (f.Root == null) return;
+            var old = f.Root.Find("Stock");
+            if (old != null) { old.name = "Stock (old)"; Object.Destroy(old.gameObject); }
+            f.Rows.Clear();
+            f.ResetVisuals();
+            if (f.Product == null || !f.HoldsProducts) return;
+
+            var root = new GameObject("Stock").transform;
+            root.SetParent(f.Root, false);
+            float yaw = Placement.Yaw(f.Rot);
+            var def = f.Def;
+
+            if (Models)
             {
-                g.SetBlocked(x, z, true);
-                shelf.Access.Add(new Vector2Int(x - 1, z));
-                shelf.Access.Add(new Vector2Int(x + 1, z));
-            }
-            d.Shelves.Add(shelf);
-        }
-
-        void BuildShelfBar(Department d, ShelfUnit shelf, Color col)
-        {
-            int x = shelf.Column;
-            float len = ShelfZ1 - ShelfZ0 + 1;
-            Mats.Box("Shelf", d.Root, x + 0.1f, ShelfZ0 + 0.05f, 0.8f, len - 0.1f, 0f, 1.3f, col, true);
-            var bar = Mats.Box("Stock", d.Root, x + 0.25f, ShelfZ0 + 0.05f, 0.5f, len - 0.1f, 1.3f, 0.18f, Color.green);
-            shelf.FillBar = bar.transform;
-            shelf.FillRenderer = bar.GetComponent<Renderer>();
-            shelf.BarLength = len - 0.1f;
-            shelf.BarStartZ = ShelfZ0 + 0.05f;
-        }
-
-        /// <summary>Fixture segments along the aisle plus a stock row on every level of every side.</summary>
-        void BuildShelfModels(Department d, ShelfUnit shelf)
-        {
-            string fixture = d.Def.Fixture;
-            float x = shelf.Column + 0.5f;
-            int segments = ShelfZ1 - ShelfZ0 + 1;
-            bool produce = fixture == "ProduceTable";
-            float[] levels = fixture == "BakeryShelf" ? BakeryLevels : ShelfLevels;
-            int nProducts = Mathf.Max(1, shelf.Products.Count);
-
-            for (int k = 0; k < segments; k++)
-            {
-                float z = ShelfZ0 + k + 0.5f;
-                M(fixture, d.Root, x, 0f, z);
-                if (shelf.Products.Count == 0) continue;
-                var p = shelf.Products[Mathf.Min(nProducts - 1, k * nProducts / segments)];
-                string mesh = ModelLibrary.StockMesh(p.Def, false);
-                for (int side = 0; side < 2; side++)
+                string mesh = ModelLibrary.StockMesh(f.Product.Def, f.IsCounter);
+                for (int s = 0; s < def.Segments.Length; s++)
                 {
-                    float yaw = side == 0 ? 0f : 180f;
-                    if (produce)
+                    var p = Placement.Point(def, f.Origin, f.Rot, def.Segments[s].x, def.Segments[s].y);
+                    if (f.IsCounter)
                     {
-                        var row = M(mesh, d.Root, x, ProducePivotY, z, yaw, ProduceTilt);
-                        if (row != null) d.AddRow(p, row);
+                        var row = M(mesh, root, p.x, 0.76f, p.z, yaw);
+                        if (row != null) f.Rows.Add(row);
+                        continue;
                     }
-                    else
+                    for (int side = 0; side < 2; side++)
                     {
-                        for (int l = 0; l < levels.Length; l++)
+                        float y2 = yaw + (side == 0 ? 0f : 180f);
+                        for (int l = 0; l < def.Levels.Length; l++)
                         {
-                            var row = M(mesh, d.Root, x, levels[l], z, yaw);
-                            if (row != null) d.AddRow(p, row);
+                            var row = M(mesh, root, p.x, def.Levels[l], p.z, y2, def.Tilted ? ProduceTilt : 0f);
+                            if (row != null) f.Rows.Add(row);
                         }
                     }
                 }
             }
-            if (fixture == "Gondola")
+            else
             {
-                M("GondolaEnd", d.Root, x, 0f, ShelfZ0);
-                M("GondolaEnd", d.Root, x, 0f, ShelfZ1 + 1f, 180f);
+                Color c = f.Product.Category.Def.Color;
+                for (int i = 0; i < f.Tiles.Count; i++)
+                    for (int k = 0; k < 3; k++)
+                    {
+                        var t = f.Tiles[i];
+                        f.Rows.Add(Mats.Box("Stock", root, t.x + 0.2f, t.y + 0.2f, 0.6f, 0.6f, 1.3f + k * 0.12f, 0.1f, c));
+                    }
             }
-        }
 
-        void BuildCounterModels(Department d, int x0)
-        {
-            int n = Mathf.Max(1, d.Products.Count);
-            for (int i = 1; i <= 10; i++)
+            // Shuffle so a half-empty shelf has gaps spread around.
+            var rng = new System.Random(f.Id * 7919);
+            for (int i = f.Rows.Count - 1; i > 0; i--)
             {
-                float x = x0 + i + 0.5f;
-                M("DeliCounter", d.Root, x, 0f, 20.5f);
-                if (d.Products.Count > 0)
-                {
-                    var p = d.Products[Mathf.Min(n - 1, (i - 1) * n / 10)];
-                    var row = M(ModelLibrary.StockMesh(p.Def, true), d.Root, x, 0.76f, 20.5f);
-                    if (row != null) d.AddRow(p, row);
-                }
+                int j = rng.Next(i + 1);
+                var t = f.Rows[i]; f.Rows[i] = f.Rows[j]; f.Rows[j] = t;
             }
-            for (int i = 2; i <= 9; i++) M("DeliBack", d.Root, x0 + i + 0.5f, 0f, 24.5f);
-            for (int i = 0; i < d.Stations.Count; i++)
-                M("DeliScale", d.Root, d.Stations[i].ServiceTile.x + 0.5f, 0f, 20.75f, 180f);
+            f.UpdateVisuals();
         }
 
-        void CollectFloorTiles(Department d, int x0)
+        public void DestroyFixture(Fixture f)
         {
-            var g = store.Grid;
-            for (int z = Layout.FloorStart; z <= Layout.FloorEnd; z++)
-                for (int x = x0; x < x0 + Layout.SlotWidth; x++)
-                    if (g.Walkable(x, z, false)) d.FloorTiles.Add(new Vector2Int(x, z));
+            if (f.Root != null) Object.Destroy(f.Root.gameObject);
+            f.Root = null;
+            f.Rows.Clear();
         }
 
-        public void ClearSlot(int slot)
+        /// <summary>A see-through preview of a fixture for build mode.</summary>
+        public GameObject BuildGhost(FixtureDef def, Vector2Int origin, int rot, Material mat, Material markerMat)
         {
-            var g = store.Grid;
-            int x0 = Layout.SlotX(slot);
-            g.ClearBlocked(x0, Layout.FloorStart, x0 + Layout.SlotWidth - 1, Layout.FloorEnd);
+            var root = new GameObject("Ghost").transform;
+            root.SetParent(store.transform, false);
+            bool models = Models && SpawnFixtureModel(def, origin, rot, root);
+            var probe = new Fixture(def, -1);
+            probe.SetPlacement(origin, rot);
+            if (!models)
+                for (int i = 0; i < probe.Tiles.Count; i++)
+                    Mats.Box("Block", root, probe.Tiles[i].x + 0.08f, probe.Tiles[i].y + 0.08f, 0.84f, 0.84f, 0f, 1.2f, Color.white);
+            var rs = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++)
+            {
+                var mats = new Material[rs[i].sharedMaterials.Length];
+                for (int k = 0; k < mats.Length; k++) mats[k] = mat;
+                rs[i].sharedMaterials = mats;
+            }
+            // footprint and the spots people stand on
+            for (int i = 0; i < probe.Tiles.Count; i++)
+                Mats.Box("Tile", root, probe.Tiles[i].x + 0.04f, probe.Tiles[i].y + 0.04f, 0.92f, 0.92f, 0.03f, 0.02f, Color.white)
+                    .GetComponent<Renderer>().sharedMaterial = mat;
+            if (def.HasWork) Marker(root, probe.Work, markerMat);
+            if (def.HasService) Marker(root, probe.Service, markerMat);
+            if (def.HasCashier) Marker(root, probe.Cashier, markerMat);
+            return root.gameObject;
+        }
+
+        static void Marker(Transform root, Vector2Int t, Material mat)
+        {
+            Mats.Box("Spot", root, t.x + 0.25f, t.y + 0.25f, 0.5f, 0.5f, 0.03f, 0.03f, Color.white)
+                .GetComponent<Renderer>().sharedMaterial = mat;
         }
     }
 }

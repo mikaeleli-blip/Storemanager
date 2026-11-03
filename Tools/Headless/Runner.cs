@@ -1,4 +1,5 @@
 // Headless simulation run of Storemanager on top of FakeUnity.
+// The scripted "player" builds a store from empty, chooses products, orders, hires and expands.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +21,9 @@ public static class Runner
 
         typeof(Bootstrap).GetMethod("Boot", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
         store = Store.I;
-        store.Clock.SetSpeed(3); // 4x, like a player fast-forwarding
+        Engine.Tick(1f / 30f);   // Start(): sits at the desk, opens build mode
+        if (scripted) BuildStarterStore();
+        store.Clock.SetSpeed(3); // 4x
 
         const float dt = 1f / 30f;
         int lastDay = store.Clock.Day, lastHour = store.Clock.Hour;
@@ -30,7 +33,6 @@ public static class Runner
         {
             Engine.Tick(dt);
             var clk = store.Clock;
-
             if (clk.Hour != lastHour)
             {
                 lastHour = clk.Hour;
@@ -51,71 +53,109 @@ public static class Runner
         return Engine.Errors > 0 ? 1 : 0;
     }
 
+    static Fixture Place(string id, int x, int z, int rot = 0, string product = null)
+    {
+        var def = Catalog.FixtureById(id);
+        var o = new Vector2Int(x, z);
+        string why = store.CanPlace(def, o, rot);
+        if (why != null) { Console.WriteLine("   !! can't place " + id + " at " + x + "," + z + " r" + rot + ": " + why); return null; }
+        var f = store.Place(def, o, rot);
+        if (product != null && !store.AssignProduct(f, Catalog.ProductByName(product)))
+            Console.WriteLine("   !! can't put " + product + " on " + id);
+        return f;
+    }
+
+    static void BuildStarterStore()
+    {
+        float cash0 = store.Economy.Cash;
+        for (int i = 0; i < 3; i++) Place("checkout", 10 + i * 3, 6);
+
+        string[] dry = { "Soft Drinks", "Snacks", "Pasta", "Cereal", "Canned Soup", "Rice", "Coffee", "Soft Drinks", "Snacks", "Pasta",
+                         "Toilet Paper", "Detergent", "Dish Soap", "Batteries", "Cereal" };
+        int k = 0;
+        foreach (int x in new[] { 2, 5, 8 })
+            for (int z = 14; z <= 20; z += 2)
+                Place("gondola", x, z, 0, dry[k++ % dry.Length]);
+
+        string[] fresh = { "Bananas", "Apples", "Tomatoes", "Potatoes", "Lettuce" };
+        k = 0;
+        foreach (int x in new[] { 14 })
+            for (int z = 14; z <= 22; z += 2)
+                Place("produce", x, z, 0, fresh[k++ % fresh.Length]);
+
+        string[] dairy = { "Milk", "Eggs", "Cheese", "Yogurt", "Frozen Pizza", "Ice Cream", "Milk", "Yogurt", "Cheese", "Eggs" };
+        k = 0;
+        foreach (int x in new[] { 20, 23 })
+            for (int z = 14; z <= 22; z += 2)
+                Place("fridge", x, z, 0, dairy[k++ % dairy.Length]);
+
+        // a sideways shelf to check rotation
+        Place("gondola", 27, 10, 1, "Snacks");
+
+        int n = store.OrderAllToPar(0f);
+        store.OrderExpress();
+        Note("PLAYER: built " + store.Fixtures.Count + " fixtures for " + Economy.Money(cash0 - store.Economy.Cash)
+            + ", ordered " + n + " products by express. Cash " + Economy.Money(store.Economy.Cash));
+    }
+
     static void Script(int day, int hour, HashSet<string> done)
     {
         var s = store;
-        // Day 1 evening: the player orders tomorrow's stock by hand.
         if (day == 1 && hour == 20) { int n = s.OrderAllToPar(0f); Note("PLAYER: ordered " + n + " products to par"); }
 
-        // Day 2: hire an assistant manager and a night stocker.
         if (day == 2 && hour == 9 && done.Add("am"))
         {
             var best = s.Staff.Applicants.OrderByDescending(a => a.Leadership).First();
             var e = s.Staff.Hire(best, Role.AssistantManager, Shift.Evening, null);
             Note("PLAYER: hired " + e.DisplayName + " as assistant manager (leadership " + e.Leadership + ")");
-            var a2 = s.Staff.Applicants[0];
-            var n = s.Staff.Hire(a2, Role.Stocker, Shift.Night, null);
+            var n = s.Staff.Hire(s.Staff.Applicants[0], Role.Stocker, Shift.Night, null);
             Note("PLAYER: hired " + n.DisplayName + " as night stocker");
+            var c = s.Staff.Hire(s.Staff.Applicants[0], Role.Cashier, Shift.Evening, null);
+            Note("PLAYER: hired " + c.DisplayName + " as evening cashier");
         }
 
-        // Day 3: build a bakery in the empty slot and hire a baker.
-        if (day == 3 && hour == 10 && done.Add("bakery"))
+        if (day == 3 && hour == 9 && done.Add("bakery"))
         {
-            s.BuildDepartment(3, Catalog.Get("bakery"));
+            Place("oven", 31, 14, 0);
+            Place("bakery_shelf", 27, 14, 0, "Bread");
+            Place("bakery_shelf", 27, 16, 0, "Croissants");
             var pick = s.Staff.Applicants.OrderByDescending(a => a.Specialty == Specialty.Baking ? 10 : 0).First();
-            var b = s.Staff.Hire(pick, Role.Baker, Shift.Night, null);
-            Note("PLAYER: building bakery, hired baker " + b.DisplayName + " (" + b.Specialty + ")");
+            var b = s.Staff.Hire(pick, Role.Baker, Shift.Morning, null);
+            var b2 = s.Staff.Hire(s.Staff.Applicants[0], Role.Baker, Shift.Night, null);
+            Note("PLAYER: bakery built, bakers " + b.DisplayName + " (" + b.Specialty + ") and " + b2.DisplayName + ". Cash " + Economy.Money(s.Economy.Cash));
         }
 
-        // Day 4: the bakery is empty all day with only a night baker; add a morning one.
-        if (day == 4 && hour == 9 && done.Add("baker2"))
+        if (day == 4 && hour == 11 && done.Add("move"))
         {
-            var b2 = s.Staff.Hire(s.Staff.Applicants[0], Role.Baker, Shift.Morning, null);
-            Note("PLAYER: hired morning baker " + b2.DisplayName + " (" + b2.Specialty + ")");
-        }
-
-        // Day 4: walk the floor for a while (manager presence), praise someone.
-        if (day == 4 && hour == 11 && done.Add("walk"))
-        {
+            var g = s.Fixtures.FirstOrDefault(f => f.Def.Id == "gondola" && f.Rot == 1);
+            if (g != null)
+            {
+                string why = s.Move(g, new Vector2Int(36, 14), 0);
+                Note("PLAYER: moved the sideways shelf: " + (why ?? "ok") + ", it still holds " + (g.Product != null ? g.Product.Name : "nothing"));
+            }
+            var sell = s.Fixtures.LastOrDefault(f => f.Def.Id == "gondola");
+            if (sell != null) { var p = sell.Product; s.Sell(sell); Note("PLAYER: sold a shelf of " + (p != null ? p.Name : "-") + ", back room now " + (p != null ? p.Back.Total : 0)); }
             var emp = s.Staff.All.FirstOrDefault(x => x.OnShift && x.Role == Role.Stocker);
-            if (emp != null) { s.Avatar.Teleport(emp.Tile); Note("PLAYER: " + emp.Praise()); }
+            if (emp != null) { s.Avatar.StandUp(); s.Avatar.Teleport(emp.Tile); Note("PLAYER: " + emp.Praise()); s.Avatar.SitDown(); }
         }
 
-        // Day 5: expand, then build a deli on day 6 and hire a deli clerk + more cashiers.
-        if (day == 5 && hour == 9 && done.Add("expand"))
+        if (day == 6 && hour == 9 && done.Add("deli"))
         {
-            if (s.CanExpand) { s.Expand(); Note("PLAYER: expansion ordered, cash now " + Economy.Money(s.Economy.Cash)); }
+            Place("deli_counter", 32, 21, 0, "Chicken");
+            Place("deli_counter", 36, 21, 0, "Sliced Ham");
+            Place("deli_counter", 40, 21, 0, "Steak");
+            var c = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Morning, null);
+            var c2 = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Evening, null);
+            s.OrderAllToPar(0f);
+            Note("PLAYER: deli built, clerks " + c.DisplayName + " and " + c2.DisplayName + ". Cash " + Economy.Money(s.Economy.Cash));
+        }
+        if (day == 7 && hour == 9 && done.Add("expand"))
+        {
+            if (s.CanExpand) { s.Expand(); Note("PLAYER: expansion ordered, cash " + Economy.Money(s.Economy.Cash)); }
             else Note("PLAYER: can't afford expansion (" + Economy.Money(s.Economy.Cash) + ")");
         }
-        if (day == 8 && hour == 9 && done.Add("deli"))
-        {
-            if (s.CanBuild(4, Catalog.Get("deli")))
-            {
-                s.BuildDepartment(4, Catalog.Get("deli"));
-                var c = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Morning, null);
-                var c2 = s.Staff.Hire(s.Staff.Applicants[0], Role.DeliClerk, Shift.Evening, null);
-                Note("PLAYER: building deli, hired " + c.DisplayName + " and " + c2.DisplayName);
-            }
-            else Note("PLAYER: can't build deli (" + Economy.Money(s.Economy.Cash) + ")");
-            var k = s.Staff.Hire(s.Staff.Applicants[0], Role.Cashier, Shift.Evening, null);
-            Note("PLAYER: hired extra cashier " + k.DisplayName);
-        }
-        // Day 7: raise prices on grocery to see the effect.
-        if (day == 7 && hour == 8 && done.Add("price"))
-        {
-            s.Slots[0].PriceMult = 1.15f;
-            Note("PLAYER: grocery prices to 115%");
-        }
+        if (day == 8 && hour == 9 && done.Add("after-expand"))
+            Place("gondola", 50, 14, 0, "Coffee");
     }
 
     static void Note(string s) { Console.WriteLine("   >> " + s); }
@@ -151,14 +191,9 @@ public static class Runner
         Console.WriteLine("   [" + c.Weekday + " " + c.TimeText + "] in store " + store.Customers.Count + "  lanes " + lanes
             + "  spills " + store.Dirt.Spills.Count + "  back " + store.BackStockTotal);
         Console.WriteLine("      staff: " + staff);
-        var empties = new List<string>();
-        for (int i = 0; i < store.SlotCount; i++)
-        {
-            var d = store.Slots[i];
-            if (d == null || !d.Active) continue;
-            foreach (var p in d.Products) if (p.Shelf.Total == 0) empties.Add(p.Def.Name + (p.Back.Total > 0 ? "(back " + p.Back.Total + ")" : "(none)"));
-        }
-        if (empties.Count > 0) Console.WriteLine("      empty shelves: " + string.Join(", ", empties));
+        var empties = store.Products.Where(p => p.Carried && p.ShelfTotal == 0)
+            .Select(p => p.Name + (p.Back.Total > 0 ? "(back " + p.Back.Total + ")" : "(none)")).ToList();
+        if (empties.Count > 0) Console.WriteLine("      empty: " + string.Join(", ", empties));
     }
 
     static void PrintDay(DayLedger d)
@@ -169,12 +204,10 @@ public static class Runner
             Economy.Money(d.Rent), Economy.Money(d.Construction), Economy.Money(d.Profit), d.AvgSatisfaction, store.Reputation,
             d.Walkouts, d.ComplaintsResolved, d.Complaints, Economy.Money(d.WasteValue), Economy.Money(store.Economy.Cash)));
         if (d.SatisfactionLost.Count > 0)
-        {
-            Console.WriteLine("      upset by: " + string.Join(", ", d.SatisfactionLost.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + " " + (kv.Value / Math.Max(1f, d.Customers)).ToString("0.0") + "/cust")));
-        }
+            Console.WriteLine("      upset by: " + string.Join(", ", d.SatisfactionLost.OrderByDescending(kv => kv.Value)
+                .Select(kv => kv.Key + " " + (kv.Value / Math.Max(1f, d.Customers)).ToString("0.0") + "/cust")));
         if (d.NotCarried.Count > 0)
             Console.WriteLine("      not carried: " + string.Join(", ", d.NotCarried.Select(kv => kv.Key + " " + kv.Value)));
-        Console.WriteLine("      staff morale: " + string.Join(", ", store.Staff.All.Where(e => e != null).Select(e => e.DisplayName.Split(' ')[0] + "(" + e.Role.ToString().Substring(0, 3) + ") " + e.Morale.ToString("0"))));
     }
 
     static void PrintLog()
@@ -183,25 +216,28 @@ public static class Runner
         store.Log.Clear();
     }
 
-    /// <summary>Runs every office tab and floor panel through OnGUI to catch null refs.</summary>
+    /// <summary>Runs every office tab, the build palette and the fixture panel through OnGUI to catch null refs.</summary>
     static void GuiPass()
     {
         var hud = store.GetComponent<Hud>();
         var onGui = typeof(Hud).GetMethod("OnGUI", BindingFlags.NonPublic | BindingFlags.Instance);
-        var tabField = typeof(Hud).GetField("tab", BindingFlags.NonPublic | BindingFlags.Instance);
         try
         {
             hud.Selected = store.Staff.All.FirstOrDefault(e => e != null && e.OnShift);
             hud.SelectedCustomer = store.Customers.FirstOrDefault(c => c != null);
-            onGui.Invoke(hud, null);
-            store.Avatar.Teleport(new Vector2Int(Layout.SlotX(1) + 1, 15));
-            onGui.Invoke(hud, null);
-            store.Avatar.Teleport(new Vector2Int(5, 29));
-            store.Avatar.SitDown();
-            for (int t = 0; t < 8; t++) { tabField.SetValue(hud, t); onGui.Invoke(hud, null); }
+            BuildMode.I.Selected = store.Fixtures.FirstOrDefault(f => f.Product != null);
             store.Avatar.StandUp();
+            onGui.Invoke(hud, null);
+            store.Avatar.SitDown();
+            for (int t = 0; t < 8; t++) { hud.ShowTab(t); onGui.Invoke(hud, null); }
+            BuildMode.I.StartPlacing(Catalog.FixtureById("checkout"));
+            onGui.Invoke(hud, null);
+            BuildMode.I.CancelTool();
+            foreach (var f in store.Fixtures.Take(12)) { BuildMode.I.Selected = f; onGui.Invoke(hud, null); }
+            hud.ShowTab(1);
             hud.Selected = null;
             hud.SelectedCustomer = null;
+            BuildMode.I.Selected = null;
         }
         catch (TargetInvocationException e)
         {
