@@ -43,6 +43,8 @@ namespace UnityEngine
         public static float Round(float v) { return (float)Math.Round(v, MidpointRounding.ToEven); }
         public static float Lerp(float a, float b, float t) { return a + (b - a) * Clamp01(t); }
         public static float Exp(float v) { return (float)Math.Exp(v); }
+        public static float InverseLerp(float a, float b, float v) { return a == b ? 0f : Clamp01((v - a) / (b - a)); }
+        public static float SmoothStep(float a, float b, float t) { t = Clamp01(t); t = -2f * t * t * t + 3f * t * t; return b * t + a * (1f - t); }
         public static float Sqrt(float v) { return (float)Math.Sqrt(v); }
         public static float Sin(float v) { return (float)Math.Sin(v); }
         public static float Cos(float v) { return (float)Math.Cos(v); }
@@ -162,6 +164,7 @@ namespace UnityEngine
         public static Color white { get { return new Color(1, 1, 1); } }
         public static Color black { get { return new Color(0, 0, 0); } }
         public static Color magenta { get { return new Color(1, 0, 1); } }
+        public static Color operator *(Color c, float f) { return new Color(c.r * f, c.g * f, c.b * f, c.a * f); }
         public static Color Lerp(Color x, Color y, float t)
         {
             t = Mathf.Clamp01(t);
@@ -343,6 +346,8 @@ namespace UnityEngine
             return null;
         }
 
+        public T[] GetComponentsInChildren<T>(bool includeInactive) where T : class { return new T[0]; }
+
         public static GameObject CreatePrimitive(PrimitiveType t)
         {
             var go = new GameObject(t.ToString());
@@ -358,6 +363,7 @@ namespace UnityEngine
         public GameObject gameObject { get { return gameObjectField; } }
         public Transform transform { get { return gameObjectField.transform; } }
         public T GetComponent<T>() where T : class { return gameObjectField.GetComponent<T>(); }
+        public T[] GetComponentsInChildren<T>(bool includeInactive) where T : class { return new T[0]; }
         public T GetComponentInParent<T>() where T : class
         {
             var t = transform;
@@ -392,7 +398,26 @@ namespace UnityEngine
         public bool enabled = true;
     }
 
-    public class Renderer : Component { public Material sharedMaterial; }
+    public class Renderer : Component
+    {
+        public Material sharedMaterial;
+        public Material[] sharedMaterials { get { return new[] { sharedMaterial }; } set { sharedMaterial = value != null && value.Length > 0 ? value[0] : null; } }
+    }
+    public class MeshFilter : Component { public Mesh sharedMesh; }
+    public struct Bounds { public Vector3 center, size; }
+    public class Mesh : Object { public Bounds bounds; public int subMeshCount = 1; }
+    public enum FilterMode { Point, Bilinear, Trilinear }
+    public class Texture : Object { public FilterMode filterMode; }
+    public class Texture2D : Texture { }
+    public enum MaterialGlobalIlluminationFlags { None, RealtimeEmissive, BakedEmissive, AnyEmissive, EmissiveIsBlack }
+    public static class Resources
+    {
+        public static T Load<T>(string path) where T : Object { return null; }
+    }
+    public class ScriptableObject : Object
+    {
+        public static T CreateInstance<T>() where T : ScriptableObject, new() { return new T(); }
+    }
     public class MeshRenderer : Renderer { }
     public class Collider : Component { }
     public class BoxCollider : Collider { }
@@ -401,8 +426,9 @@ namespace UnityEngine
     public class Light : Behaviour
     {
         public LightType type;
-        public float intensity;
+        public float intensity, shadowStrength, shadowBias, shadowNormalBias;
         public LightShadows shadows;
+        public Color color;
     }
 
     public class Camera : Behaviour
@@ -423,13 +449,30 @@ namespace UnityEngine
     public class Material : Object
     {
         public Color color;
-        public Material(Shader s) { }
+        public Texture mainTexture;
+        public Vector2 mainTextureScale;
+        public bool enableInstancing;
+        public int renderQueue;
+        public MaterialGlobalIlluminationFlags globalIlluminationFlags;
+        public Shader shader;
+        public Material(Shader s) { shader = s; }
+        public void SetTexture(string n, Texture t) { }
+        public void SetTextureScale(string n, Vector2 v) { }
+        public void SetColor(string n, Color c) { }
+        public void SetFloat(string n, float v) { }
+        public void SetInt(string n, int v) { }
+        public void EnableKeyword(string k) { }
+        public void DisableKeyword(string k) { }
+        public void SetOverrideTag(string a, string b) { }
     }
 
     public static class RenderSettings
     {
         public static Rendering.AmbientMode ambientMode;
-        public static Color ambientLight;
+        public static Color ambientLight, ambientSkyColor, ambientEquatorColor, ambientGroundColor;
+        public static Light sun;
+        public static Material skybox;
+        public static bool fog;
     }
 
     public class YieldInstruction { }
@@ -687,9 +730,52 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum AmbientMode { Skybox, Trilight, Flat, Custom }
+    public enum BlendMode { Zero, One, DstColor, SrcColor, OneMinusDstColor, SrcAlpha, OneMinusSrcColor, DstAlpha, OneMinusDstAlpha, SrcAlphaSaturate, OneMinusSrcAlpha }
+    public class VolumeParameter<T>
+    {
+        public T value;
+        public void Override(T v) { value = v; }
+    }
+    public class VolumeComponent : UnityEngine.ScriptableObject { }
+    public class VolumeProfile : UnityEngine.ScriptableObject
+    {
+        public T Add<T>(bool overrides) where T : VolumeComponent, new() { return new T(); }
+    }
+    public class Volume : UnityEngine.MonoBehaviour
+    {
+        public bool isGlobal;
+        public float priority;
+        public VolumeProfile sharedProfile;
+    }
     public class RenderPipelineAsset : UnityEngine.Object { }
     public static class GraphicsSettings
     {
         public static RenderPipelineAsset currentRenderPipeline { get { return null; } }
+    }
+}
+
+namespace UnityEngine.Rendering.Universal
+{
+    public enum TonemappingMode { None, Neutral, ACES }
+    public enum AntialiasingMode { None, FastApproximateAntialiasing, SubpixelMorphologicalAntiAliasing, TemporalAntiAliasing }
+    public class Tonemapping : VolumeComponent { public VolumeParameter<TonemappingMode> mode = new VolumeParameter<TonemappingMode>(); }
+    public class Bloom : VolumeComponent
+    {
+        public VolumeParameter<float> threshold = new VolumeParameter<float>(), intensity = new VolumeParameter<float>(), scatter = new VolumeParameter<float>();
+    }
+    public class ColorAdjustments : VolumeComponent
+    {
+        public VolumeParameter<float> contrast = new VolumeParameter<float>(), saturation = new VolumeParameter<float>(), postExposure = new VolumeParameter<float>();
+        public VolumeParameter<Color> colorFilter = new VolumeParameter<Color>();
+    }
+    public class Vignette : VolumeComponent { public VolumeParameter<float> intensity = new VolumeParameter<float>(), smoothness = new VolumeParameter<float>(); }
+    public class UniversalAdditionalCameraData : UnityEngine.MonoBehaviour
+    {
+        public bool renderPostProcessing, renderShadows;
+        public AntialiasingMode antialiasing;
+    }
+    public static class CameraExtensions
+    {
+        public static UniversalAdditionalCameraData GetUniversalAdditionalCameraData(this Camera cam) { return new UniversalAdditionalCameraData(); }
     }
 }

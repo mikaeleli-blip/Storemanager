@@ -5,6 +5,7 @@ namespace StoreManager
 {
     public class ShelfUnit
     {
+        public int Column;
         public readonly List<Vector2Int> Access = new List<Vector2Int>();
         public readonly List<ProductStock> Products = new List<ProductStock>();
         public Transform FillBar;
@@ -85,6 +86,38 @@ namespace StoreManager
         }
 
         public float SalesToday;
+
+        // Model stock rows per product; shown front-to-back of this list as the shelf fills.
+        public readonly Dictionary<ProductStock, List<GameObject>> StockRows = new Dictionary<ProductStock, List<GameObject>>();
+        readonly Dictionary<ProductStock, int> rowsShown = new Dictionary<ProductStock, int>();
+
+        public void ClearRows()
+        {
+            StockRows.Clear();
+            rowsShown.Clear();
+        }
+
+        public void AddRow(ProductStock p, GameObject row)
+        {
+            List<GameObject> list;
+            if (!StockRows.TryGetValue(p, out list)) { list = new List<GameObject>(); StockRows[p] = list; }
+            list.Add(row);
+        }
+
+        /// <summary>Shuffle each product's rows so a half-empty shelf has gaps spread around, not one empty end.</summary>
+        public void ShuffleRows()
+        {
+            var rng = new System.Random(Slot * 977 + 13);
+            foreach (var list in StockRows.Values)
+            {
+                for (int i = list.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    var t = list[i]; list[i] = list[j]; list[j] = t;
+                }
+            }
+            rowsShown.Clear();
+        }
 
         public Department(DepartmentDef def, int slot)
         {
@@ -176,6 +209,18 @@ namespace StoreManager
 
         public void UpdateVisuals()
         {
+            foreach (var kv in StockRows)
+            {
+                var p = kv.Key;
+                var rows = kv.Value;
+                int n = rows.Count;
+                int want = p.Shelf.Total <= 0 ? 0 : Mathf.Clamp(Mathf.CeilToInt(p.ShelfFill * n), 1, n);
+                int shown;
+                if (rowsShown.TryGetValue(p, out shown) && shown == want) continue;
+                for (int i = 0; i < n; i++)
+                    if (rows[i] != null) rows[i].SetActive(i < want);
+                rowsShown[p] = want;
+            }
             for (int i = 0; i < Shelves.Count; i++)
             {
                 var s = Shelves[i];

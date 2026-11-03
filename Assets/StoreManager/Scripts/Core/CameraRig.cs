@@ -11,13 +11,13 @@ namespace StoreManager
         public Vector3 Focus;
         public float Yaw;
         public float Pitch = 55f;
-        public float Distance = 22f;
+        public float Distance = 34f;
         public bool FreeMode;
         public Transform FollowTarget;
         public Vector2 BoundsMin, BoundsMax;
 
-        public const float MinDistance = 7f;
-        public const float MaxDistance = 85f;
+        public const float MinDistance = 10f;
+        public const float MaxDistance = 130f;
 
         public Vector3 FlatForward { get { return Quaternion.Euler(0f, Yaw, 0f) * Vector3.forward; } }
         public Vector3 FlatRight { get { return Quaternion.Euler(0f, Yaw, 0f) * Vector3.right; } }

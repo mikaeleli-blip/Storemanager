@@ -99,7 +99,7 @@ namespace StoreManager
             if (cam != null)
             {
                 cam.FreeMode = true;
-                cam.Distance = Mathf.Max(cam.Distance, 40f);
+                cam.Distance = Mathf.Max(cam.Distance, 60f);
             }
         }
 
@@ -110,7 +110,7 @@ namespace StoreManager
             if (cam != null)
             {
                 cam.FreeMode = false;
-                cam.Distance = Mathf.Min(cam.Distance, 24f);
+                cam.Distance = Mathf.Min(cam.Distance, 34f);
             }
         }
 

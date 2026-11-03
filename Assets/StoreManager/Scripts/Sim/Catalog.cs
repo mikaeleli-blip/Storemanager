@@ -30,6 +30,7 @@ namespace StoreManager
         public DeptKind Kind;
         public Color Color;
         public float BuildCost;
+        public string Fixture = "Gondola";   // model used for the aisles (see ModelLibrary)
         public bool NeedsSpecialist;
         public Role SpecialistRole;
         public readonly List<ProductDef> Products = new List<ProductDef>();
@@ -61,6 +62,7 @@ namespace StoreManager
             grocery.Products.Add(new ProductDef("Soft Drinks", 0.8f, 1.7f, 0, 1.3f, 24));
 
             var produce = Dept("produce", "Produce", DeptKind.Shelves, "#6fbf4a", 0f);
+            produce.Fixture = "ProduceTable";
             produce.Products.Add(new ProductDef("Apples", 0.6f, 1.3f, 10, 1.1f, 40));
             produce.Products.Add(new ProductDef("Bananas", 0.3f, 0.7f, 6, 1.2f, 40));
             produce.Products.Add(new ProductDef("Potatoes", 0.5f, 1.1f, 20, 0.9f, 30));
@@ -68,6 +70,7 @@ namespace StoreManager
             produce.Products.Add(new ProductDef("Lettuce", 0.7f, 1.6f, 4, 0.7f, 24));
 
             var dairy = Dept("dairy", "Dairy & Frozen", DeptKind.Shelves, "#7fb3e6", 0f);
+            dairy.Fixture = "Fridge";
             dairy.Products.Add(new ProductDef("Milk", 0.7f, 1.4f, 7, 1.4f, 24));
             dairy.Products.Add(new ProductDef("Eggs", 1.5f, 3.0f, 21, 1.0f, 12));
             dairy.Products.Add(new ProductDef("Cheese", 2.5f, 4.8f, 30, 0.9f, 12));
@@ -82,6 +85,7 @@ namespace StoreManager
             household.Products.Add(new ProductDef("Batteries", 3.5f, 7.0f, 0, 0.4f, 12));
 
             var bakery = Dept("bakery", "Bakery", DeptKind.Bakery, "#e3c08d", 9000f);
+            bakery.Fixture = "BakeryShelf";
             bakery.NeedsSpecialist = true;
             bakery.SpecialistRole = Role.Baker;
             bakery.Products.Add(new ProductDef("Bread", 0.6f, 2.8f, 2, 1.4f, 12));
@@ -89,6 +93,7 @@ namespace StoreManager
             bakery.Products.Add(new ProductDef("Cakes", 3.0f, 9.0f, 3, 0.5f, 6));
 
             var deli = Dept("deli", "Deli & Meat", DeptKind.Counter, "#d86a5c", 12000f);
+            deli.Fixture = "DeliCounter";
             deli.NeedsSpecialist = true;
             deli.SpecialistRole = Role.DeliClerk;
             deli.Products.Add(new ProductDef("Sliced Ham", 1.8f, 3.8f, 5, 0.6f, 20));

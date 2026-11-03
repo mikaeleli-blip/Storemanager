@@ -32,3 +32,7 @@ crashlytics-build.properties
 .vscode/
 .idea/
 .DS_Store
+
+# Blender preview renders (regenerate with Tools/Blender/build_models.py --preview)
+/Tools/Blender/previews/
+__pycache__/

@@ -123,29 +123,19 @@ namespace StoreManager
             }
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.16f, 0.18f, 0.2f);
-            cam.fieldOfView = 45f;
-            cam.nearClipPlane = 0.3f;
-            cam.farClipPlane = 400f;
+            cam.fieldOfView = 30f;
+            cam.nearClipPlane = 0.5f;
+            cam.farClipPlane = 600f;
             Cam = cam.GetComponent<CameraRig>();
             if (Cam == null) Cam = cam.gameObject.AddComponent<CameraRig>();
             Cam.FollowTarget = Avatar.transform;
             Cam.Focus = Avatar.transform.position;
             UpdateCameraBounds();
 
-            Light sun = null;
-            var lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
-            for (int i = 0; i < lights.Length; i++)
-                if (lights[i].type == LightType.Directional) { sun = lights[i]; break; }
-            if (sun == null)
-            {
-                sun = new GameObject("Sun").AddComponent<Light>();
-                sun.type = LightType.Directional;
-            }
-            sun.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
-            sun.intensity = 1.1f;
-            sun.shadows = LightShadows.Soft;
-            RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.48f, 0.48f, 0.52f);
+            var atmosphere = new GameObject("Atmosphere").AddComponent<Atmosphere>();
+            atmosphere.transform.SetParent(transform, false);
+            atmosphere.Init(cam);
+            atmosphere.Apply(Clock.Minute / 60f);
         }
 
         void UpdateCameraBounds()
@@ -233,7 +223,7 @@ namespace StoreManager
                 Color c = lane.Accepting && !lane.Closing ? new Color(0.2f, 0.85f, 0.3f)
                     : lane.Staffed ? new Color(0.95f, 0.8f, 0.2f)
                     : new Color(0.85f, 0.15f, 0.12f);
-                lane.Light.sharedMaterial = Mats.Get(c);
+                lane.Light.sharedMaterial = Mats.Glow(c);
             }
         }
 

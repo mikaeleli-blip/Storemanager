@@ -228,7 +228,7 @@ namespace StoreManager
                 var pos = new Vector3(Layout.SlotX(s) + 6f, 2.2f, Layout.FloorStart + 0.8f);
                 if (d == null) Label3D(cam, pos, "<color=#cccccc>Empty slot " + (s + 1) + "</color>", 180f);
                 else if (d.UnderConstruction) Label3D(cam, pos, "<color=#ffd24d>" + d.Name + " (building)</color>", 200f);
-                else Label3D(cam, pos, d.Name, 180f);
+                else if (!ModelLibrary.Available) Label3D(cam, pos, d.Name, 180f);
             }
             Label3D(cam, new Vector3(4f, 2f, 30f), "<color=#ffe08a>Office</color>", 100f);
             Label3D(cam, new Vector3(store.Grid.W * 0.5f + 4f, 2.5f, 30.5f), "<color=#cfd8e6>Back room</color>", 140f);
