@@ -182,13 +182,29 @@ namespace StoreManager
         /// The assistant manager's order: everything on sale up to the next-but-one delivery, within the back-room
         /// space, skipping suppliers on hold and orders under a supplier's minimum. Returns products ordered.
         /// </summary>
-        public int AutoOrder(float error)
+        public int AutoOrder(float error) { return AutoOrder(error, null, true); }
+
+        /// <summary>Department managers who order for their own department.</summary>
+        public bool DepartmentOrdered(Category c)
+        {
+            for (int i = 0; i < Staff.All.Count; i++)
+            {
+                var e = Staff.All[i];
+                if (e != null && !e.Leaving && e.Rank == Rank.DeptManager && e.Department == c && e.OrdersForDepartment) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Orders products (only one department if given), skipping departments whose manager orders them.</summary>
+        public int AutoOrder(float error, Category only, bool skipManaged)
         {
             var c = new Cart();
             for (int i = 0; i < Products.Count; i++)
             {
                 var p = Products[i];
                 if (!p.Carried || p.Baked) continue;
+                if (only != null && p.Category != only) continue;
+                if (only == null && skipManaged && DepartmentOrdered(p.Category)) continue;
                 var s = SupplierOf(p);
                 if (s == null || s.OnHold) continue;
                 int need = SuggestedPar(p) - (p.FreshOnHand + p.OnOrder + p.OnExpress);

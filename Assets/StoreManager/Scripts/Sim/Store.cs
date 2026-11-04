@@ -75,6 +75,13 @@ namespace StoreManager
         }
         public Vector2Int StaffEntrance { get { return new Vector2Int(Grid.W - 4, Layout.DockRow); } }
         public Vector2Int DeskSeat { get { return new Vector2Int(3, 30); } }
+
+        /// <summary>Where staff sit on their break: by the sofa in the office.</summary>
+        public Vector2Int BreakSpot(Employee e)
+        {
+            int k = Mathf.Abs(e.GetInstanceID()) % 4;
+            return new Vector2Int(5 + k % 2, 28 + k / 2);
+        }
         /// <summary>Where the camera sits to look at the office computer screen (desk at 3.5, 31.5, monitor facing -Z).</summary>
         public Vector3 MonitorView { get { return new Vector3(3.5f, 1.18f, 30.72f); } }
 
@@ -221,9 +228,13 @@ namespace StoreManager
             float share = 0.8f * p.Def.Demand / Mathf.Max(0.01f, carried) + 0.2f * p.Def.Demand / Catalog.TotalDemand;
             float daily = ExpectedCustomersPerDay * 6.5f * 1.3f * share;
             int cs = p.Def.CaseSize;
-            // Enough to last until the delivery after next (direct suppliers don't come every day).
-            float days = p.Def.Supplier != null ? Mathf.Max(ParDays, p.Def.Supplier.MaxGap + 1f) : ParDays;
-            return Mathf.Max(cs * 2, Mathf.CeilToInt(daily * days / cs) * cs);
+            // Enough to last until the delivery after next (direct suppliers don't come every day),
+            // counting busy weekends from the day it arrives.
+            int days = Mathf.CeilToInt(p.Def.Supplier != null ? Mathf.Max(ParDays, p.Def.Supplier.MaxGap + 1f) : ParDays);
+            int from = p.Def.Supplier != null ? NextDelivery(p.Def.Supplier) : Clock.Day + 1;
+            float weight = 0f;
+            for (int k = 0; k < days; k++) weight += DayFactor[(from - 1 + k) % 7];
+            return Mathf.Max(cs * 2, Mathf.CeilToInt(daily * weight / cs) * cs);
         }
 
         public Product ProductOf(ProductDef def)
@@ -243,6 +254,7 @@ namespace StoreManager
         void Update()
         {
             SpawnCustomers();
+            Staff.Tick();
 
             visualsTimer += Time.unscaledDeltaTime;
             if (visualsTimer > 0.4f)
@@ -334,6 +346,17 @@ namespace StoreManager
             }
 
             if (am != null && am.OnShift && Delegation.Bills) AssistantPaysBills(am);
+
+            // Department managers order their own department an hour before their shift ends.
+            for (int i = 0; i < Staff.All.Count; i++)
+            {
+                var e = Staff.All[i];
+                if (e == null || !e.OnShift || e.Rank != Rank.DeptManager || e.Department == null || !e.OrdersForDepartment) continue;
+                if (h != (StaffManager.ShiftEnd(e.Shift) + 23) % 24) continue;
+                float derr = Mathf.Clamp((10f - e.Leadership) * 0.03f, 0f, 0.3f);
+                int n = AutoOrder(derr, e.Department, false);
+                if (n > 0) Message(e.DisplayName + " (" + e.Department.Name + " manager) ordered " + n + " products.");
+            }
 
             Staff.OnHour(h);
         }

@@ -19,7 +19,6 @@ namespace StoreManager
         public Employee Selected;
         public Customer SelectedCustomer;
 
-        int hireRole, hireShift;
         Employee confirmFire;
         float confirmTime;
         string toast = "";
@@ -37,6 +36,7 @@ namespace StoreManager
 
         static readonly string[] RoleNames = { "Cashier", "Stocker", "Cleaner", "Baker", "Deli Clerk", "Asst. Mgr" };
         static readonly string[] ShiftNames = { "Morning", "Evening", "Night" };
+        static readonly string[] SlotNames = { "Off", "Morning", "Evening", "Night" };
 
         static GUILayoutOption W(float w) { return GUILayout.Width(w); }
         static string Money(float v) { return Economy.Money(v); }
@@ -186,6 +186,17 @@ namespace StoreManager
                 alerts.Add("<color=#ffcc55>Nothing ordered for tomorrow's truck (Shop app).</color>");
             if (store.Economy.Cash < 0f) alerts.Add("<color=#ff6655>The store is in the red.</color>");
 
+            int reviews = 0, lateNow = 0;
+            for (int i = 0; i < store.Staff.All.Count; i++)
+            {
+                var e = store.Staff.All[i];
+                if (e == null) continue;
+                if (store.Staff.ReviewDue(e)) reviews++;
+                if (e.ArriveAt >= 0f) lateNow++;
+            }
+            if (reviews > 0) alerts.Add("<color=#ffcc55>" + reviews + " performance review" + (reviews == 1 ? "" : "s") + " due (Staff app).</color>");
+            if (lateNow > 0) alerts.Add("<color=#ffcc55>" + lateNow + " staff late for their shift.</color>");
+
             int overdue = store.OverdueCount;
             if (overdue > 0) alerts.Add("<color=#ff6655>" + overdue + " bills are overdue (Bills app).</color>");
             float due = store.DueWithin(1);
@@ -300,6 +311,14 @@ namespace StoreManager
                 if (c != null && c.Complaining)
                     Label3D(cam, c.transform.position + new Vector3(0f, 3.2f, 0f), "<color=#ff5544>! " + c.DisplayName + "</color>", 200f);
             }
+            // You can see someone slacking if you're on the floor and they're not too far away.
+            if (!desk)
+                for (int i = 0; i < store.Staff.All.Count; i++)
+                {
+                    var e = store.Staff.All[i];
+                    if (e == null || !e.OnShift || !e.Slacking || store.Avatar.DistanceTo(e.transform.position) > 16f) continue;
+                    Label3D(cam, e.transform.position + new Vector3(0f, 2.4f, 0f), "<color=#ff9966>" + e.SlackWhat + "</color>", 240f);
+                }
             if (Selected != null && Selected.gameObject.activeInHierarchy)
                 Label3D(cam, Selected.transform.position + new Vector3(0f, 2.5f, 0f), "<color=#9fe3ff>" + Selected.DisplayName + "</color>", 200f);
             if (SelectedCustomer != null)
@@ -401,29 +420,34 @@ namespace StoreManager
 
         void DrawEmployeePanel(Employee e, float sw, float sh)
         {
-            var r = new Rect(sw - 408f, sh - 258f, 400f, 250f);
+            var r = new Rect(sw - 408f, sh - 300f, 400f, 292f);
             Panel(r);
             GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 10f));
-            GUILayout.Label(e.DisplayName + "  <size=12>" + Catalog.RoleName(e.Role) + ", " + StaffManager.ShiftName(e.Shift) + "</size>", header);
-            GUILayout.Label("Status: " + (e.OnShift ? e.Status : e.Absent ? "Called in sick" : "Off duty"), rich);
-            GUILayout.Label("Morale " + MoraleText(e.Morale) + "   Wage $" + e.Wage.ToString("0") + "/h (asked $" + e.AskingWage.ToString("0") + ")", rich);
+            GUILayout.Label(e.DisplayName + "  <size=12>" + Catalog.RoleName(e.Role) + (e.RankName.Length > 0 ? ", " + e.RankName : "") + "</size>", header);
+            string status = e.OnShift ? e.Status : e.ArriveAt >= 0f ? "Late, not here yet" : e.Absent ? e.Status : "Off duty";
+            GUILayout.Label("Status: " + (e.Slacking ? "<color=#ff9966>" + status + "</color>" : status), rich);
+            GUILayout.Label("Morale " + MoraleText(e.Morale) + "   Wage $" + e.Wage.ToString("0") + "/h" + (e.OnProbation ? "   <color=#ffd166>probation</color>" : "")
+                + (e.ActiveWrittenWarnings > 0 ? "   <color=#ff7766>" + e.ActiveWrittenWarnings + " written warning(s)</color>" : ""), rich);
             if (e.MoraleNote.Length > 0) GUILayout.Label("Morale " + e.MoraleNote, small);
             GUILayout.Label(SkillText(e), small);
-            if (e.Role == Role.Stocker)
-                GUILayout.Label("Restocks: " + (e.AssignedCategory != null ? e.AssignedCategory.Name : "everything"), small);
-            if (e.OnShift) GUILayout.Label("Busy " + Mathf.RoundToInt(e.Utilisation * 100f) + "% of this shift" + (e.WarnedThisShift ? ", warned" : ""), small);
+            var inc = e.WarnableIncident;
+            if (inc != null) GUILayout.Label("<color=#ff9966>Recent: " + inc.Note + " (day " + inc.Day + " " + inc.Time + ")</color>", small);
 
             var av = store.Avatar;
             bool near = e.OnShift && !av.AtDesk && av.DistanceTo(e.transform.position) <= ManagerAvatar.TalkRange;
             GUILayout.BeginHorizontal();
             GUI.enabled = near;
-            if (GUILayout.Button("Praise", W(110))) Toast(e.Praise());
-            if (GUILayout.Button("Warn", W(110))) Toast(e.Warn());
+            if (GUILayout.Button("Praise", W(84))) Toast(e.Praise());
+            if (GUILayout.Button("A word", W(84))) Toast(e.VerbalWarning());
+            GUI.enabled = near && inc != null;
+            if (GUILayout.Button("Written warning", W(124))) Toast(e.WrittenWarning());
             GUI.enabled = true;
-            if (GUILayout.Button("Close", W(80))) Selected = null;
+            if (GUILayout.Button("Close", W(64))) Selected = null;
             GUILayout.EndHorizontal();
             if (!near)
-                GUILayout.Label(av.AtDesk ? "Get up from the desk and walk over to talk." : e.OnShift ? "Walk within 3 m to talk." : "Not at work right now.", small);
+                GUILayout.Label(av.AtDesk ? "Get up from the desk and walk over to talk. Written warnings can also be given in the Staff app."
+                    : e.OnShift ? "Walk within 3 m to talk." : "Not at work right now.", small);
+            else GUILayout.Label("\"A word\" is a verbal warning: they behave for a few days. A written warning (áminning) goes on their record; two allow dismissal.", small);
             GUILayout.EndArea();
         }
 
@@ -448,8 +472,8 @@ namespace StoreManager
 
         static string SkillText(Employee e)
         {
-            string s = "Speed " + e.Speed.ToString("0.#") + "  Service " + e.Service.ToString("0.#")
-                + "  Reliability " + e.Reliability.ToString("0.#") + "  Leadership " + e.Leadership.ToString("0.#");
+            string s = "Speed " + e.Known(0) + "  Service " + e.Known(1) + "  Reliability " + e.Known(2) + "  Leadership " + e.Known(3)
+                + "  Work ethic " + e.Known(4);
             if (e.Specialty != Specialty.None) s += "  [" + e.Specialty + "]";
             return s;
         }
@@ -559,118 +583,6 @@ namespace StoreManager
             }
         }
 
-        void StaffTab()
-        {
-            var staff = store.Staff;
-            float wages = 0f;
-            for (int i = 0; i < staff.All.Count; i++)
-                if (staff.All[i] != null) wages += staff.All[i].Wage * 8f * (staff.All[i].Shift == Shift.Night ? 1.25f : 1f);
-            GUILayout.Label(staff.All.Count + " staff. Wages about " + Money(wages) + " a day.", rich);
-            GUILayout.Label("Click Role, Shift or Restocks to change them.", small);
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Date checks", bold, W(100));
-            int dc = GUILayout.Toolbar((int)store.DateChecks, new[] { "Only when restocking", "Once a day", "Every shift" }, W(420));
-            store.DateChecks = (DateCheckPolicy)dc;
-            GUILayout.EndHorizontal();
-            GUILayout.Label("Stockers always pull expired stock from shelves they refill. Date-check rounds also cover every shelf with perishables "
-                + "(slow sellers too), but take time away from restocking. Expired items left out upset customers.", small);
-            GUILayout.Space(4f);
-
-            var list = staff.All.ToArray();
-            for (int i = 0; i < list.Length; i++)
-            {
-                var e = list[i];
-                if (e == null) continue;
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(e.DisplayName, W(150))) Selected = e;
-                if (GUILayout.Button(Catalog.RoleName(e.Role), W(110))) staff.SetRole(e, NextRole(e));
-                if (GUILayout.Button(ShiftNames[(int)e.Shift], W(80))) staff.SetShift(e, (Shift)(((int)e.Shift + 1) % 3));
-                bool stocker = e.Role == Role.Stocker;
-                GUI.enabled = stocker;
-                if (GUILayout.Button(stocker ? (e.AssignedCategory != null ? e.AssignedCategory.Name : "Everything") : "-", W(120)))
-                    staff.SetCategory(e, NextCategory(e));
-                GUI.enabled = true;
-                if (GUILayout.Button("Raise", W(54))) { e.GiveRaise(); Toast(e.DisplayName + " now earns $" + e.Wage.ToString("0") + "/h."); }
-                bool confirming = confirmFire == e && Time.unscaledTime - confirmTime < 3f;
-                if (GUILayout.Button(confirming ? "Sure?" : "Fire", W(54)))
-                {
-                    if (confirming) { staff.Fire(e); confirmFire = null; if (Selected == e) Selected = null; }
-                    else { confirmFire = e; confirmTime = Time.unscaledTime; }
-                }
-                GUILayout.EndHorizontal();
-                string status = e.OnShift ? e.Status : e.Absent ? "Off sick" : "Off duty";
-                GUILayout.Label("   Morale " + MoraleText(e.Morale) + (e.MoraleNote.Length > 0 ? " (" + e.MoraleNote + ")" : "")
-                    + "   $" + e.Wage.ToString("0") + "/h   " + SkillText(e) + "   <i>" + status + "</i>", small);
-                GUILayout.Space(2f);
-            }
-        }
-
-        Role NextRole(Employee e)
-        {
-            var am = store.Staff.Assistant;
-            Role r = e.Role;
-            for (int i = 0; i < 6; i++)
-            {
-                r = (Role)(((int)r + 1) % 6);
-                if (r == Role.AssistantManager && am != null && am != e) continue;
-                if (store.RoleLock(r) != null) continue;
-                return r;
-            }
-            return e.Role;
-        }
-
-        Category NextCategory(Employee e)
-        {
-            var options = new List<Category> { null };
-            for (int i = 0; i < store.Categories.Count; i++)
-            {
-                var c = store.Categories[i];
-                if (c.Def.Baked || c.Def.Fixture == "deli_counter") continue;
-                options.Add(c);
-            }
-            int idx = options.IndexOf(e.AssignedCategory);
-            return options[(idx + 1) % options.Count];
-        }
-
-        void HireTab()
-        {
-            var staff = store.Staff;
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Hire as", W(60));
-            hireRole = GUILayout.Toolbar(hireRole, RoleNames);
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Shift", W(60));
-            hireShift = GUILayout.Toolbar(hireShift, ShiftNames, W(330));
-            GUILayout.EndHorizontal();
-            bool amTaken = (Role)hireRole == Role.AssistantManager && staff.Assistant != null;
-            string roleLock = store.RoleLock((Role)hireRole);
-            if (roleLock != null) GUILayout.Label("<color=#ff9977>Can't hire " + RoleNames[hireRole] + "s yet: " + roleLock.ToLower() + ".</color>", rich);
-            else if (amTaken) GUILayout.Label("<color=#ffcc55>You already have an assistant manager.</color>", rich);
-            GUILayout.Label("Leadership only matters for an assistant manager. Bakers work fast with Baking, deli clerks with Butchery. Night shift pays 25% more.", small);
-            GUILayout.Space(6f);
-
-            var list = staff.Applicants.ToArray();
-            for (int i = 0; i < list.Length; i++)
-            {
-                var a = list[i];
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(a.Name, bold, W(170));
-                GUILayout.Label("Speed " + a.Speed + "  Service " + a.Service + "  Reliability " + a.Reliability + "  Leadership " + a.Leadership, small, W(330));
-                GUILayout.Label(a.Specialty != Specialty.None ? "[" + a.Specialty + "]" : "", small, W(80));
-                GUILayout.Label("$" + a.AskingWage.ToString("0") + "/h", W(60));
-                GUI.enabled = !amTaken && roleLock == null;
-                if (GUILayout.Button("Hire", W(70)))
-                {
-                    var e = staff.Hire(a, (Role)hireRole, (Shift)hireShift, null);
-                    Toast("Hired " + e.DisplayName + " as " + Catalog.RoleName(e.Role) + " (" + ShiftNames[(int)e.Shift] + ").");
-                }
-                GUI.enabled = true;
-                GUILayout.EndHorizontal();
-            }
-            GUILayout.Label("New applicants come in every day.", small);
-        }
-
         void DelegationTab()
         {
             var am = store.Staff.Assistant;
@@ -680,12 +592,12 @@ namespace StoreManager
                 GUILayout.Label("You have no assistant manager.", header);
                 string amLock = store.RoleLock(Role.AssistantManager);
                 if (amLock != null) GUILayout.Label("<color=#ff9977>Assistant managers unlock at level " + Catalog.RoleLevel(Role.AssistantManager) + ".</color>", rich);
-                else GUILayout.Label("Hire one in the Hiring app (pick Asst. Mgr), or change someone's role in the Staff app. Leadership decides how well they do.", rich);
+                else GUILayout.Label("Promote someone in the Staff app (a department manager, or anyone once you reach level " + Catalog.RoleLevel(Role.AssistantManager) + "), or hire one in the Hiring app. Leadership decides how well they do.", rich);
             }
             else
             {
                 GUILayout.Label("Assistant manager: " + am.DisplayName, header);
-                GUILayout.Label(StaffManager.ShiftName(am.Shift) + "   Leadership " + am.Leadership.ToString("0.#")
+                GUILayout.Label("Leadership " + am.Known(3)
                     + "   " + (am.OnShift ? "At work: " + am.Status : "Not at work"), rich);
                 GUILayout.Label("They only do these jobs while on shift.", small);
             }

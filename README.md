@@ -21,7 +21,7 @@ and grow the store. See [docs/DESIGN.md](docs/DESIGN.md).
 |---|---|---|---|
 | Move | WASD, or right-click a spot | — | WASD pans the camera |
 | Rotate / zoom | Q / E, mouse wheel | — | Q / E, mouse wheel |
-| Talk to staff | Left-click someone within 3 m | — | — |
+| Talk to staff | Left-click someone within 3 m: praise, a word, written warning | Staff app | — |
 | Apps | — | Click desktop icons; drag windows by the title bar | — |
 | Build | — | Build icon or taskbar button | Pick a fixture, left-click to place, R rotate, right-click cancel |
 | Shelf product | — | — | Click a shelf, pick its product |

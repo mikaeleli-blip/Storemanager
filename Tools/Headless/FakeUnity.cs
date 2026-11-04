@@ -280,6 +280,9 @@ namespace UnityEngine
     {
         internal bool destroyed;
         public string name = "";
+        static int nextId = 1;
+        readonly int instanceId = nextId++;
+        public int GetInstanceID() { return instanceId; }
 
         public static bool operator ==(Object a, Object b)
         {

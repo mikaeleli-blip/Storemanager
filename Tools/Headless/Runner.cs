@@ -136,16 +136,82 @@ public static class Runner
         return s.Cart.Lines.Count;
     }
 
-    static int Count(Role r, Shift sh) { return store.Staff.All.Count(e => e != null && !e.Leaving && e.Role == r && e.Shift == sh); }
-
-    static void HireIf(Role r, Shift sh, int want, Func<Applicant, float> score = null, bool essential = false)
+    static bool CanCover(Applicant a, int d, ShiftSlot slot)
     {
-        if (store.RoleLock(r) != null) return;
-        while (Count(r, sh) < want && store.Staff.Applicants.Count > 0 && (essential || store.Economy.Cash > Reserve))
+        if (slot == ShiftSlot.Night && a.NoNights) return false;
+        if (slot == ShiftSlot.Morning && a.NoMornings && d < 5) return false;
+        if (a.NoWeekends && d >= 5) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Hires until every day has `want` people of this role on this shift: a full-timer for five uncovered days,
+    /// a part-timer for one to three. Interviews a couple of candidates first and picks the best-sounding one.
+    /// </summary>
+    static void HireIf(Role r, ShiftSlot slot, int want, Func<Applicant, float> score = null, bool essential = false)
+    {
+        var s = store;
+        if (s.RoleLock(r) != null) return;
+        for (int guard = 0; guard < 4; guard++)
         {
-            var a = score != null ? store.Staff.Applicants.OrderByDescending(score).First() : store.Staff.Applicants[0];
-            var e = store.Staff.Hire(a, r, sh, null);
-            Note("PLAYER: hired " + e.DisplayName + " as " + Catalog.RoleName(r) + " (" + sh + ")");
+            // an extra cashier on the busy days (Fri, Sat)
+            var missing = Enumerable.Range(0, 7).Where(d => s.Staff.Coverage(r, d, slot) < want + (r == Role.Cashier && Store.DayFactor[d] >= 1.1f ? 1 : 0)).ToList();
+            if (missing.Count == 0 || s.Staff.Applicants.Count == 0 || (!essential && s.Economy.Cash < Reserve)) return;
+            bool full = missing.Count >= 4;
+            var days = full ? missing.OrderBy(d => d >= 5 ? 1 : 0).Take(5).ToList() : missing.Take(3).ToList();
+            var pool = s.Staff.Applicants.Where(a => days.All(d => CanCover(a, d, slot)) && (full ? !a.WantsPartTime : !a.WantsFullTime)).ToList();
+            if (pool.Count == 0) return;
+            foreach (var a in pool.Take(2))
+                for (int q = 0; q < 8 && a.Asked.Count < Interview.MaxQuestions; q += 3) s.Staff.Ask(a, q % 8);
+            var pick = score != null ? pool.OrderByDescending(score).First()
+                : pool.OrderByDescending(a => a.Mid(0) + a.Mid(1) + a.Mid(4)).First();
+            string result;
+            var e = s.Staff.Offer(pick, r, full ? Contract.FullTime : Contract.PartTime, slot, pick.AskingWage, out result);
+            if (e == null) { Note("PLAYER: offer failed: " + result); return; }
+            for (int d = 0; d < 7; d++) e.Week[d] = ShiftSlot.Off;
+            foreach (int d in days) e.Week[d] = slot;
+            Note("PLAYER: hired " + e.DisplayName + " as " + Catalog.RoleName(r) + " " + (full ? "FT" : "PT") + " " + slot + " on "
+                + string.Join(",", days.Select(d => StaffManager.DayNames[d])));
+        }
+    }
+
+    /// <summary>Reviews, warnings, dismissals and promotions, like a player looking at the Staff app each morning.</summary>
+    static void ManageStaff(int day)
+    {
+        var s = store;
+        var staff = s.Staff;
+        foreach (var e in staff.All.ToList())
+        {
+            if (e == null || e.Leaving) continue;
+            if (staff.ReviewDue(e))
+            {
+                string sum;
+                int rating = staff.Rating(e, out sum);
+                Note("PLAYER: " + staff.Review(e, rating >= 5 ? 2f : rating >= 4 ? 1f : 0f));
+            }
+            var inc = e.WarnableIncident;
+            if (inc != null && (inc.Kind == IncidentKind.NoShow || inc.Kind == IncidentKind.LongBreak || inc.Kind == IncidentKind.Late))
+            {
+                if (e.ActiveWrittenWarnings >= 2 && staff.FireProblem(e) == null) { Note("PLAYER: dismissed " + e.DisplayName + " after two written warnings"); staff.Fire(e); continue; }
+                if (e.Record.Count(r => r.Day > day - 7 && (r.Kind == IncidentKind.Late || r.Kind == IncidentKind.LongBreak || r.Kind == IncidentKind.NoShow)) >= 2)
+                    Note("PLAYER: " + e.WrittenWarning());
+            }
+        }
+        // one shift lead per main shift, the best leaders first
+        foreach (var slot in new[] { ShiftSlot.Morning, ShiftSlot.Evening })
+        {
+            bool hasLead = staff.All.Any(e => e != null && e.IsLead && e.Week.Count(w => w == slot) >= 3);
+            if (hasLead) continue;
+            var cand = staff.All.Where(e => e != null && e.Rank == Rank.Staff && e.Role != Role.AssistantManager && e.Week.Count(w => w == slot) >= 3
+                && staff.PromoteProblem(e, null) == null).OrderByDescending(e => e.Leadership).FirstOrDefault();
+            if (cand != null) Note("PLAYER: " + staff.Promote(cand, null));
+        }
+        // a department manager for dairy once there is one
+        var dairy = s.Categories.FirstOrDefault(c => c.Def.Id == "dairy");
+        if (dairy != null && dairy.Products.Any(p => p.Carried) && !s.DepartmentOrdered(dairy))
+        {
+            var lead = staff.All.FirstOrDefault(e => e != null && e.Rank == Rank.ShiftLead && staff.PromoteProblem(e, dairy) == null);
+            if (lead != null) Note("PLAYER: " + staff.Promote(lead, dairy));
         }
     }
 
@@ -221,15 +287,16 @@ public static class Runner
         // 6. staff
         int shelves = s.Fixtures.Count(f => f.HoldsProducts && !f.IsCounter);
         int cashiers = Mathf.Min(lanes, 1 + (int)(s.ExpectedCustomersPerDay / 220f));
-        HireIf(Role.Cashier, Shift.Morning, cashiers, null, true);
-        HireIf(Role.Cashier, Shift.Evening, cashiers, null, true);
-        HireIf(Role.Stocker, Shift.Morning, 1 + shelves / 10, null, true);
-        HireIf(Role.Stocker, Shift.Evening, Mathf.Max(1, shelves / 12), null, true);
-        HireIf(Role.Cleaner, Shift.Morning, 1);
-        if (s.Economy.Cash > 12000f) HireIf(Role.AssistantManager, Shift.Evening, 1, a => a.Leadership);
+        if (hour == 9) ManageStaff(day);
+        HireIf(Role.Cashier, ShiftSlot.Morning, cashiers, null, true);
+        HireIf(Role.Cashier, ShiftSlot.Evening, cashiers, null, true);
+        HireIf(Role.Stocker, ShiftSlot.Morning, 1 + shelves / 10, null, true);
+        HireIf(Role.Stocker, ShiftSlot.Evening, Mathf.Max(1, shelves / 12), null, true);
+        HireIf(Role.Cleaner, ShiftSlot.Morning, 1);
+        if (s.Economy.Cash > 12000f && s.Staff.Assistant == null) HireIf(Role.AssistantManager, ShiftSlot.Evening, 1, a => a.Mid(3));
         if (s.Staff.Assistant != null && done.Add("delegate")) { s.Delegation.Ordering = true; s.Delegation.Complaints = true; s.Delegation.Checkouts = true; }
-        if (s.Fixtures.Any(f => f.Def.Id == "oven")) { HireIf(Role.Baker, Shift.Night, 1, a => a.Specialty == Specialty.Baking ? 1 : 0); HireIf(Role.Baker, Shift.Morning, 1); }
-        if (s.Fixtures.Any(f => f.Def.Id == "deli_counter")) { HireIf(Role.DeliClerk, Shift.Morning, 1, a => a.Specialty == Specialty.Butchery ? 1 : 0); HireIf(Role.DeliClerk, Shift.Evening, 1); }
+        if (s.Fixtures.Any(f => f.Def.Id == "oven")) { HireIf(Role.Baker, ShiftSlot.Night, 1, a => a.Specialty == Specialty.Baking ? 1 : 0); HireIf(Role.Baker, ShiftSlot.Morning, 1); }
+        if (s.Fixtures.Any(f => f.Def.Id == "deli_counter")) { HireIf(Role.DeliClerk, ShiftSlot.Morning, 1, a => a.Specialty == Specialty.Butchery ? 1 : 0); HireIf(Role.DeliClerk, ShiftSlot.Evening, 1); }
 
         // 7. expansion
         if (s.CanExpand && s.Economy.Cash > s.ExpansionCost + Reserve * 2f)
@@ -289,6 +356,13 @@ public static class Runner
         Console.WriteLine("      expiry: binned " + d.WrittenOff + " (" + Economy.Money(d.WasteValue) + ", credit " + Economy.Money(d.ReturnCredit)
             + ")  customers found expired " + d.ExpiredFound + "  still on shelves " + store.ExpiredOnShelvesTotal
             + " | bills unpaid " + Economy.Money(store.UnpaidTotal) + " overdue " + store.OverdueCount + " late fees " + Economy.Money(d.LateFees));
+        var st = store.Staff.All.Where(e => e != null).ToList();
+        int lateToday = st.Sum(e => e.Record.Count(r => r.Day == d.Day && r.Kind == IncidentKind.Late));
+        int longB = st.Sum(e => e.Record.Count(r => r.Day == d.Day && r.Kind == IncidentKind.LongBreak));
+        int sick = st.Sum(e => e.Record.Count(r => r.Day == d.Day && (r.Kind == IncidentKind.Sick || r.Kind == IncidentKind.NoShow)));
+        float slack = st.Sum(e => e.Reports.Where(r => r.Day == d.Day).Sum(r => r.SlackMinutes));
+        Console.WriteLine("      staff: " + st.Count + " (" + st.Count(e => e.Contract == Contract.FullTime) + " FT, " + st.Count(e => e.IsLead) + " leads)  late " + lateToday
+            + "  long breaks " + longB + "  sick/no-show " + sick + "  slack " + slack.ToString("0") + " min  wages " + Economy.Money(d.Wages));
         if (d.SatisfactionLost.Count > 0)
             Console.WriteLine("      upset by: " + string.Join(", ", d.SatisfactionLost.OrderByDescending(kv => kv.Value)
                 .Select(kv => kv.Key + " " + (kv.Value / Math.Max(1f, d.Customers)).ToString("0.0") + "/cust")));
@@ -318,6 +392,19 @@ public static class Runner
             store.Cam.LockBlend = 1f;
             for (int t = 0; t < Hud.AppCount; t++) hud.OpenApp((Hud.App)t);
             onGui.Invoke(hud, null);
+            var F = BindingFlags.NonPublic | BindingFlags.Instance;
+            foreach (var e in store.Staff.All.Where(x => x != null).Take(6))
+            {
+                typeof(Hud).GetField("staffSel", F).SetValue(hud, e);
+                onGui.Invoke(hud, null);
+            }
+            var lead = store.Staff.All.FirstOrDefault(x => x != null && x.Rank == Rank.ShiftLead);
+            if (lead != null) { typeof(Hud).GetField("staffSel", F).SetValue(hud, lead); onGui.Invoke(hud, null); }
+            foreach (var a in store.Staff.Applicants.Take(3))
+            {
+                typeof(Hud).GetField("appSel", F).SetValue(hud, a);
+                onGui.Invoke(hud, null);
+            }
             typeof(Hud).GetField("statsPage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(hud, 1);
             var some = store.Products.FirstOrDefault(p => p.Carried && !p.Baked);
             if (some != null) store.Cart.Add(some, 2);

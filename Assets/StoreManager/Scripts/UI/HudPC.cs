@@ -9,24 +9,25 @@ namespace StoreManager
     /// </summary>
     public partial class Hud
     {
-        public enum App { Shop, Bills, Products, Licences, Staff, Hiring, Assistant, Stats, Expansion, Inbox }
-        public const int AppCount = 10;
-        static readonly string[] AppNames = { "Shop", "Bills", "Products", "Licences", "Staff", "Hiring", "Assistant", "Stats", "Expansion", "Inbox" };
+        public enum App { Shop, Bills, Products, Licences, Staff, Roster, Hiring, Assistant, Stats, Expansion, Inbox }
+        public const int AppCount = 11;
+        static readonly string[] AppNames = { "Shop", "Bills", "Products", "Licences", "Staff", "Roster", "Hiring", "Assistant", "Stats", "Expansion", "Inbox" };
         static readonly string[] AppTitles =
         {
-            "Ordering: warehouse and suppliers", "Bills (reikningar)", "Products & prices", "Licences", "Staff", "Hiring", "Assistant manager",
-            "Statistics", "Expansion", "Inbox",
+            "Ordering: warehouse and suppliers", "Bills (reikningar)", "Products & prices", "Licences", "Staff: profiles, reviews, discipline",
+            "Roster (vaktaplan)", "Hiring and interviews", "Assistant manager", "Statistics", "Expansion", "Inbox",
         };
         static readonly Color[] AppColors =
         {
-            Mats.Hex("#2f9e6a"), Mats.Hex("#a8432f"), Mats.Hex("#d08a2c"), Mats.Hex("#b8913a"), Mats.Hex("#3f7fd0"), Mats.Hex("#6a5acd"),
+            Mats.Hex("#2f9e6a"), Mats.Hex("#a8432f"), Mats.Hex("#d08a2c"), Mats.Hex("#b8913a"), Mats.Hex("#3f7fd0"), Mats.Hex("#3a9a8c"), Mats.Hex("#6a5acd"),
             Mats.Hex("#c0566b"), Mats.Hex("#2a9db0"), Mats.Hex("#7a8a3a"), Mats.Hex("#5d6b7d"),
         };
         static readonly Color BuildColor = Mats.Hex("#d9573b");
         static readonly Vector2[] AppSizes =
         {
-            new Vector2(1100f, 740f), new Vector2(1000f, 680f), new Vector2(1000f, 680f), new Vector2(1020f, 660f), new Vector2(1080f, 620f), new Vector2(980f, 620f),
-            new Vector2(720f, 460f), new Vector2(980f, 660f), new Vector2(640f, 340f), new Vector2(720f, 560f),
+            new Vector2(1100f, 740f), new Vector2(1000f, 680f), new Vector2(1000f, 680f), new Vector2(1020f, 660f), new Vector2(1140f, 720f),
+            new Vector2(1020f, 720f), new Vector2(1140f, 740f), new Vector2(720f, 460f), new Vector2(980f, 660f), new Vector2(640f, 340f),
+            new Vector2(720f, 560f),
         };
 
         class PcWindow
@@ -132,6 +133,8 @@ namespace StoreManager
                     "#+###+####..", "#++++#oooo#.", "######oooo#.", ".....#oooo#.", "......####..", "......#..#.." },
             new[] { "............", "..##....##..", ".####..####.", ".####..####.", "..##....##..", "............",
                     ".####..####.", "######.#####", "######.#####", "######.#####", "............", "............" },
+            new[] { "..#....#....", ".##########.", ".##########.", ".#++#++#++#.", ".#++#++#++#.", ".##########.",
+                    ".#++#++#++#.", ".#++#++#++#.", ".##########.", ".#++#++#oo#.", ".#++#++#oo#.", ".##########." },
             new[] { "............", "...###......", "..#####.....", "..#####..#..", "...###...#..", "........###.",
                     ".######..#..", "########.#..", "########....", "########....", "............", "............" },
             new[] { "............", "....####....", "...######...", "...######...", "....####....", "............",
@@ -405,6 +408,9 @@ namespace StoreManager
 
             GUILayout.BeginArea(new Rect(12f, 38f, ww - 24f, wh - 48f));
             if (w.App == App.Shop) ShopApp(w, ww - 24f, wh - 48f);
+            else if (w.App == App.Staff) StaffApp(w, ww - 24f, wh - 48f);
+            else if (w.App == App.Roster) RosterApp(w, ww - 24f, wh - 48f);
+            else if (w.App == App.Hiring) HiringApp(w, ww - 24f, wh - 48f);
             else
             {
                 if (w.App == App.Stats)
@@ -418,8 +424,6 @@ namespace StoreManager
                     case App.Bills: BillsApp(); break;
                     case App.Products: ProductsApp(); break;
                     case App.Licences: LicencesTab(); break;
-                    case App.Staff: StaffTab(); break;
-                    case App.Hiring: HireTab(); break;
                     case App.Assistant: DelegationTab(); break;
                     case App.Stats: if (statsPage == 0) OverviewTab(); else FinancesTab(); break;
                     case App.Expansion: ExpansionTab(); break;

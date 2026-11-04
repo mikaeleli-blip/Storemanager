@@ -52,9 +52,10 @@ manager and grow the store.
   open apps, game speed, clock). Widgets on the right show today's numbers,
   level progress, alerts and the latest messages.
 - Apps, all only here: **Shop** (order stock), **Bills** (supplier invoices),
-  **Products** (prices, stock and expiry), **Licences**, **Staff**, **Hiring**,
-  **Assistant** (delegation), **Stats** (today and the last 7 days),
-  **Expansion**, **Inbox** (all messages).
+  **Products** (prices, stock and expiry), **Licences**, **Staff** (profiles,
+  reviews, discipline), **Roster**, **Hiring** (interviews), **Assistant**
+  (delegation), **Stats** (today and the last 7 days), **Expansion**,
+  **Inbox** (all messages).
 - **Build** leaves the screen for the overhead camera: **WASD** pans over the
   whole store, Q/E rotate, wheel zooms; place fixtures and pick shelf products.
   **Esc** goes back to the computer.
@@ -180,21 +181,83 @@ floor is placed by you, from the **office desk** (Build tab):
 
 ## Staff
 
-- Skills (1–10): **Speed**, **Service**, **Reliability**, **Leadership**;
-  some have a **specialty** (Baking, Butchery).
-- **Roles:** Cashier, Stocker (restocks everything or one category), Cleaner,
-  Baker, Deli Clerk (serves whichever counter has people waiting), Assistant
-  Manager (one only).
-- **Shifts:** Morning 07–15, Evening 14–22, Night 22–06 (+25% pay). Night
-  stockers fill shelves while the store is closed.
-- **Morale** (0–100) changes with pay vs asking wage, workload, praise and
-  warnings. Low morale means slower work, more sick days and quitting. Each
-  employee shows why their morale moved last shift (overworked, underpaid...).
-- Absences: chance to call in sick depends on reliability and morale.
-- Cashiers close their lane at shift end and serve the queue that's left
-  before going home.
-- Hiring: a pool of applicants that changes daily. Firing lowers everyone's
-  morale a little.
+### Contracts and the roster
+- Everyone has a **contract**: full-time (5 shifts a week) or part-time (3).
+  Shifts: Morning 07-15, Evening 14-22, Night 22-06 (+25% pay).
+- The **Roster app** (vaktaplan) is a Mon-Sun grid per employee: click a cell
+  to cycle Off / Morning / Evening / Night. The week repeats; changes to today
+  take effect immediately. People's availability is respected (students: no
+  weekday mornings, some: no nights or no weekends).
+- Shifts beyond the contract are **overtime** (x1.5). Less than **11 hours**
+  between two shifts (evening then morning, night then anything next day) means
+  tired staff (slower, more sick days, morale down). No day off, or fewer shifts
+  than the contract, also costs morale.
+- A **coverage** table shows how many of each role are rostered per day and
+  shift; red where the store needs someone (cashiers while open, a morning
+  stocker). Fridays and Saturdays are busier.
+- **Call in** an off-duty employee from their profile when someone's sick
+  (overtime if over contract; unhappy on a day off).
+- Starting crew: two full-time cashiers (weekday mornings and evenings), a
+  full-time weekday stocker and two part-time cashiers for Fri-Sun. Weekend
+  stocking is a gap to fill.
+
+### Breaks and the time clock
+- Every shift has a 30-minute **break** in the office. Breaks are staggered:
+  one person per role at a time, and a cashier on the last open till waits up
+  to two hours for cover. Two cashiers on a shift keep a till open.
+- The **time clock** records late arrivals, no-shows, sick calls and long
+  breaks; the till and stock records give output per hour (items scanned,
+  units stocked, customers served). Shown per shift in the Staff app.
+
+### Hiring and interviews
+- Applicants (a new batch every few days) come with a CV: age, experience,
+  last job, contract wish and availability. Their real skills, **work ethic**,
+  **ambition** and **charm** are hidden.
+- **Interviews** (Hiring app, 4 per day): ask 3 of 8 questions. Each answer
+  narrows what you know about a trait. Charming applicants oversell
+  themselves. **References** (answer next morning) are honest about
+  reliability and work ethic; people with no work history have none.
+- **Offer**: role, contract, usual shift and wage. Below their asking wage
+  they may say no (and won't consider another offer that day); above it they
+  start happier.
+- New staff start on **14 days' probation**. You learn their real skills after
+  10 shifts.
+
+### Slacking and discipline
+- Low work ethic (worse with low morale) means slacking: on the phone,
+  chatting, hiding in the back room, smoke breaks, long breaks, turning up
+  late. Much less when someone's watching: you on the floor, a shift lead,
+  the assistant manager or their department manager. Recent warnings and
+  probation also keep people in line.
+- **Catch them**: walk within 4 m of someone slacking (you see what they're up
+  to from 16 m). It goes on their record.
+- **Talk** (on the floor, within 3 m): praise, "a word" (verbal warning:
+  behaves for a few days) or a **written warning** (áminning) for a recent
+  incident (late, long break, caught slacking, no-show). Written warnings can
+  also be given from the Staff app; they stay active for 60 days.
+- **Dismissal**: free during probation. After that you need two active written
+  warnings; otherwise it's unfair dismissal: 80 hours' wages in compensation
+  and everyone's morale drops.
+
+### Careers, reviews and promotions
+- Ladder: **Staff > Shift Lead > Department Manager > Assistant Manager**.
+  - Shift Lead (store level 2, 10 days in, no active written warning, +$2.50):
+    staff around them slack less and work a little faster.
+  - Department Manager (level 5, 20 days in, +$2.50): runs one department:
+    supervises its stockers and orders its stock before their shift ends.
+  - Assistant Manager (level 3, one only, +$3): the delegation jobs below.
+  - Demoting is possible, but people take it badly.
+- **Performance reviews** every 30 days: a 1-5 rating from the time clock,
+  output and conduct. Good ratings expect a raise; a missed or overdue review
+  costs morale.
+- **Ambitious** staff who aren't promoted after about 25 days get restless and
+  may leave for a job with more responsibility.
+
+### Morale
+- Morale (0-100) moves with pay vs asking wage, workload, praise, warnings,
+  rest between shifts, days off, hours vs contract, overtime, reviews and
+  promotions. Each employee shows why it moved last shift. Low morale means
+  slower work, more slacking and sick days, and eventually quitting.
 
 ## Assistant manager
 
@@ -251,7 +314,8 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 1. **First slice (this build):** build mode with free placement, one product
    per shelf, licences and store levels, staff roles and shifts, assistant
    manager, customers, orders, express delivery, expansion, office/floor.
-2. Staff breaks, break room, overtime, part-timers, weekly schedule screen.
+2. Staff: a proper break room, holidays and leave requests, staff swapping
+   shifts, notice periods.
 3. Suppliers with different prices and lead times; promotions and sales.
 4. Decor and signs you can place; drag-to-place rows of shelves.
 5. Self-checkouts, security/shoplifting, events (holidays, heat waves).
