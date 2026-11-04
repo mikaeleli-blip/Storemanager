@@ -37,8 +37,12 @@ def build_all(only=None):
         o.location = (0, 0, -100)   # park out of the preview scene
         return o
 
+    products.ITEMS.clear()
     for fn in products.ALL:
         run('products', fn)
+    for o in list(products.ITEMS):
+        o.location = (0, 0, -100)
+        made['products'].append(o)
     for fn in fixtures.FIXTURES + fixtures.BUILDING:
         run('fixtures', fn)
     for name, label, color in fixtures.SIGNS:
@@ -73,7 +77,7 @@ def preview_scene():
     # grocery aisle: two gondolas, 4 segments each
     g = get('Gondola')
     for gx, names in ((0.0, ['Stock_Pasta', 'Stock_Cereal', 'Stock_Canned_Soup', 'Stock_Rice']),
-                      (3.0, ['Stock_Snacks', 'Stock_Soft_Drinks', 'Stock_Coffee', 'Stock_Pasta'])):
+                      (3.0, ['Stock_Snacks', 'Stock_Bubbla_Cola', 'Stock_Zing_Cola', 'Stock_Sliced_Bread'])):
         for i in range(4):
             kit.instance(g, (gx, 0, i + 0.5))
             stock_on(g, (gx, i + 0.5), fixtures.LEVELS, names[i:] + names[:i])
@@ -92,7 +96,7 @@ def preview_scene():
     # bakery shelf
     for i in range(2):
         kit.instance(get('BakeryShelf'), (12.0, 0, i + 0.5))
-        stock_on(None, (12.0, i + 0.5), fixtures.BAKERY_LEVELS, ['Stock_Bread', 'Stock_Croissants', 'Stock_Cakes'])
+        stock_on(None, (12.0, i + 0.5), fixtures.BAKERY_LEVELS, ['Stock_Fresh_Bread', 'Stock_Croissants', 'Stock_Cakes'])
     kit.instance(get('Oven'), (12.5, 0, 4.5))
     # deli counter along X at z = 7
     for i in range(4):
@@ -131,6 +135,26 @@ def preview_props():
         kit.instance(get(n), (17 + (i % 2) * 3.5, 0.2 + (i // 2) * 0.9, 9))
 
 
+def preview_items(names, origin_x=0.0):
+    """A group of products on their own, facing the camera in two rows, like a catalogue page."""
+    per_row = (len(names) + 1) // 2
+    for i, n in enumerate(names):
+        r, c = divmod(i, per_row)
+        kit.instance(get(n), (origin_x - r * 0.42, 0, c * 0.34))
+    return per_row
+
+
+ITEM_PAGES_FIX = [('items_fixes', ['Item_Sliced_Bread', 'Item_Sliced_Ham', 'Item_Bubbla_Cola', 'Item_Zing_Cola'])]
+
+ITEM_PAGES = [
+    ('items_grocery', ['Item_Pasta', 'Item_Rice', 'Item_Canned_Soup', 'Item_Cereal', 'Item_Coffee', 'Item_Snacks',
+                       'Item_Bubbla_Cola', 'Item_Zing_Cola', 'Item_Sliced_Bread', 'Item_Detergent', 'Item_Toilet_Paper', 'Item_Dish_Soap']),
+    ('items_fresh', ['Item_Milk', 'Item_Eggs', 'Item_Cheese', 'Item_Yogurt', 'Item_Frozen_Pizza', 'Item_Ice_Cream', 'Item_Batteries',
+                     'Item_Fresh_Bread', 'Item_Croissants', 'Item_Cakes', 'Item_Apples', 'Item_Tomatoes']),
+    ('items_produce_deli', ['Item_Bananas', 'Item_Potatoes', 'Item_Lettuce', 'Item_Sliced_Ham', 'Item_Chicken', 'Item_Salads', 'Item_Steak']),
+]
+
+
 def render_previews():
     os.makedirs(PREVIEW, exist_ok=True)
     kit.setup_render((1400, 900), samples=32)
@@ -143,6 +167,28 @@ def render_previews():
     kit.render(os.path.join(PREVIEW, 'fresh_close.png'))
     kit.camera_look((-2, 0.6, -2.5), yaw_deg=10, pitch_deg=40, dist=8, fov=40)
     kit.render(os.path.join(PREVIEW, 'checkouts.png'))
+    kit.camera_look((3.5, 0.9, 2.0), yaw_deg=30, pitch_deg=32, dist=4.2, fov=40)
+    kit.render(os.path.join(PREVIEW, 'shelves_close.png'))
+
+
+def render_items(pages=None):
+    pages = pages or ITEM_PAGES
+    kit.setup_render((1600, 900), samples=48)
+    kit.begin()
+    kit.box_mm((-3.0, -0.02, -1.0), (1.5, 0.0, 30.0), 'offwhite')
+    kit.finish('PreviewFloor3')
+    for page, (fname, names) in enumerate(pages):
+        z0 = page * 8.0
+        per_row = 0
+        placed = []
+        for i, n in enumerate(names):
+            pr = (len(names) + 1) // 2
+            r, c = divmod(i, pr)
+            kit.instance(get(n), (-r * 0.45, 0, z0 + c * 0.34))
+            per_row = pr
+        centre_z = z0 + (per_row - 1) * 0.34 / 2
+        kit.camera_look((-0.22, 0.07, centre_z), yaw_deg=-90, pitch_deg=30, dist=2.0 + per_row * 0.18, fov=38)
+        kit.render(os.path.join(PREVIEW, fname + '.png'))
 
 
 def export_all(made):
@@ -150,7 +196,10 @@ def export_all(made):
     kit.write_palette(os.path.join(OUT, 'palette.png'), os.path.join(OUT, 'palette_e.png'))
     pal = bpy.data.materials.new('Palette')
     glass = bpy.data.materials.new('Glass')
-    for group, fname in (('products', 'Products.fbx'), ('fixtures', 'Fixtures.fbx'), ('decor', 'Decor.fbx')):
+    groups = (('products', 'Products.fbx'), ('fixtures', 'Fixtures.fbx'), ('decor', 'Decor.fbx'))
+    if ONLY_PRODUCTS:
+        groups = groups[:1]
+    for group, fname in groups:
         objs = made[group]
         for o in objs:
             o.location = (0, 0, 0)
@@ -159,11 +208,20 @@ def export_all(made):
         print('exported', fname, len(objs), 'objects')
 
 
+ONLY_PRODUCTS = False
+
 if __name__ == '__main__':
     args = sys.argv[1:]
+    ONLY_PRODUCTS = '--products-only' in args
     made = build_all()
     counts = {k: sum(len(o.data.polygons) for o in v) for k, v in made.items()}
     print('built', {k: len(v) for k, v in made.items()}, 'faces', counts)
+    if '--fixes' in args:
+        render_items(ITEM_PAGES_FIX)
+        made = build_all()
+    if '--items' in args:
+        render_items()
+        made = build_all()
     if '--preview' in args:
         render_previews()
     if '--export' in args:

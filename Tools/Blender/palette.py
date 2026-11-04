@@ -34,3 +34,12 @@ add_colors({
     'light': '#fff4d8', 'light_cool': '#e2f4ff', 'glow_green': '#46ff7a',
     'glow_red': '#ff4436', 'glow_amber': '#ffbf3c', 'screen': '#6fd3ff',
 }, emissive=True)
+
+# Products (added later; appended so existing palette cells keep their place)
+add_colors({
+    'cola': '#3a1d12', 'bubbla': '#d8232a', 'zing': '#2459c4', 'zing_dark': '#173a82',
+    'pasta': '#f0d27a', 'chip': '#f2b744', 'kraft': '#b58a52', 'cheese_dark': '#d9a52f',
+    'potato_dark': '#8f6638', 'lettuce_light': '#b8e28a', 'flour': '#f3ece0', 'chicken_dark': '#a8662a',
+    'crumb': '#f1dfb8', 'corn': '#f4d03f', 'coleslaw': '#e9efc8', 'orange_dark': '#c4661a',
+})
+

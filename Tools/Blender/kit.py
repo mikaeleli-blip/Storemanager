@@ -289,6 +289,8 @@ def bake_palette_uvs(o, palette_mat, glass_mat):
     names = [s.material.name if s.material else 'P_white' for s in o.material_slots]
     if not me.uv_layers:
         me.uv_layers.new(name='UV')
+    if me.uv_layers.active is None:
+        me.uv_layers.active = me.uv_layers[0]
     uv = me.uv_layers.active.data
     uses_glass = any(n == 'P_glass' for n in names)
     for p in me.polygons:

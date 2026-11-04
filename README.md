@@ -39,7 +39,8 @@ Assets/StoreManager/Scripts/
   Sim/     catalog, products, fixtures, economy, orders
   Agents/  customers, staff, assistant manager, manager avatar
   UI/      IMGUI HUD, office screens, build mode
-Tools/Blender/   scripted low-poly models (build_models.py) and textures
+Tools/Blender/   scripted low-poly models (build_models.py) and textures;
+                 products.py: shelf rows (Stock_*, Deli_*) and single items (Item_*)
 Tools/Headless/  simulation harness (run.sh)
 ```
 
