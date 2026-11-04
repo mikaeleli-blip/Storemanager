@@ -164,6 +164,23 @@ namespace StoreManager
                 return;
             }
 
+            // Expired items still on the shelf: the more there are, the likelier this customer picks one up.
+            // Counter staff never hand over expired stock.
+            int expired = f.Stock.ExpiredTotal;
+            if (expired > 0 && !f.IsCounter && Random.value < expired / (float)f.Stock.Total)
+            {
+                p.ExpiredFoundToday++;
+                Store.I.Economy.Today.ExpiredFound++;
+                Lose("Expired products", 9f);
+                MaybeComplain("found expired " + p.Name);
+            }
+            if (f.Stock.FreshTotal <= 0)
+            {
+                p.MissedToday++;
+                Lose("Empty shelves", 4f);
+                return;
+            }
+
             float mult = p.Category.PriceMult;
             if (mult > 1.001f)
             {
@@ -182,7 +199,8 @@ namespace StoreManager
                 Satisfaction += (1f - mult) * 10f;
             }
 
-            int got = f.Stock.Take(qty);
+            // A quarter of shoppers reach to the back for the freshest date; that leaves older stock to expire.
+            int got = p.Life > 0 && !f.IsCounter && Random.value < 0.25f ? f.Stock.TakeNewest(qty) : f.Stock.TakeFresh(qty);
             if (got < qty) Lose("Empty shelves", 2f);
             Items += got;
             float value = got * p.Price;

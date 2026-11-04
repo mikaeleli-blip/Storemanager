@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 
@@ -444,9 +445,9 @@ namespace StoreManager
             {
                 var f = all[i];
                 if (!f.HoldsProducts || f.IsBakeryShelf || f.Product == null || f.Removed) continue;
-                if (f.ClaimedBy != null || f.Product.Back.Total <= 0 || f.Fill >= 0.6f) continue;
+                if (f.ClaimedBy != null || f.Product.Back.FreshTotal <= 0 || f.FreshFill >= 0.6f) continue;
                 if (AssignedCategory != null && f.Product.Category != AssignedCategory) continue;
-                float score = f.Fill * 40f + (f.Center - transform.position).magnitude * 0.1f;
+                float score = f.FreshFill * 40f + (f.Center - transform.position).magnitude * 0.1f;
                 if (score < bestScore) { bestScore = score; best = f; }
             }
             return best;
@@ -456,6 +457,11 @@ namespace StoreManager
         {
             while (true)
             {
+                if (Store.I.ClaimDateCheck(this))
+                {
+                    yield return StartCoroutine(DateCheckRound());
+                    continue;
+                }
                 var f = FindRestock();
                 if (f == null)
                 {
@@ -477,8 +483,10 @@ namespace StoreManager
             Status = "Fetching " + p.Name;
             yield return StartCoroutine(MoveTo(Store.I.BackPickNear(f)));
             yield return StartCoroutine(DoWork(2f));
+            // Expired cases in the back get scanned out instead of going on the shelf.
+            Store.I.WriteOff(p, p.Back.RemoveExpired());
 
-            int n = Mathf.Min(capacity, Mathf.Min(f.Def.Capacity - f.Stock.Total, p.Back.Total));
+            int n = Mathf.Min(capacity, Mathf.Min(f.Def.Capacity - f.Stock.FreshTotal, p.Back.Total));
             if (!f.Removed && f.Product == p && n > 0)
             {
                 p.Back.MoveTo(cart, n);
@@ -488,6 +496,8 @@ namespace StoreManager
                 yield return StartCoroutine(DoWork(1f + n * 0.2f));
                 if (!f.Removed && f.Product == p)
                 {
+                    // Facing the shelf: anything out of date comes off.
+                    Store.I.WriteOff(p, f.Stock.RemoveExpired());
                     int fit = Mathf.Max(0, f.Def.Capacity - f.Stock.Total);
                     cart.MoveTo(f.Stock, Mathf.Min(fit, cart.Total));
                 }
@@ -499,6 +509,65 @@ namespace StoreManager
             claimed = null;
         }
 
+        /// <summary>
+        /// Walks the back room and every shelf holding something perishable, pulls out expired stock and
+        /// scans it out at the back. Suppliers with a returns policy credit part of it on their next delivery.
+        /// </summary>
+        IEnumerator DateCheckRound()
+        {
+            var store = Store.I;
+            idle = false;
+            int total = 0;
+
+            Status = "Date check: back room";
+            yield return StartCoroutine(MoveTo(store.BackPickNear(null)));
+            yield return StartCoroutine(DoWork(3f));
+            for (int i = 0; i < store.Products.Count; i++)
+            {
+                var p = store.Products[i];
+                if (p.Life <= 0) continue;
+                int n = p.Back.RemoveExpired();
+                store.WriteOff(p, n);
+                total += n;
+            }
+
+            var todo = new List<Fixture>();
+            for (int i = 0; i < store.Fixtures.Count; i++)
+            {
+                var f = store.Fixtures[i];
+                if (f.HoldsProducts && !f.Removed && f.Product != null && f.Product.Life > 0) todo.Add(f);
+            }
+            while (todo.Count > 0 && !ShiftEnding)
+            {
+                // nearest next
+                int best = 0;
+                float bd = float.MaxValue;
+                for (int i = 0; i < todo.Count; i++)
+                {
+                    float d = (todo[i].Center - transform.position).sqrMagnitude;
+                    if (d < bd) { bd = d; best = i; }
+                }
+                var f = todo[best];
+                todo.RemoveAt(best);
+                if (f.Removed || f.Product == null) continue;
+                var p = f.Product;
+                Status = "Date check: " + p.Name;
+                yield return StartCoroutine(MoveTo(f.IsCounter ? f.Work : f.AccessTile(store.Grid)));
+                yield return StartCoroutine(DoWork(0.6f + f.Stock.Total * 0.02f));
+                if (f.Removed || f.Product != p) continue;
+                int n = f.Stock.RemoveExpired();
+                store.WriteOff(p, n);
+                total += n;
+            }
+
+            if (total > 0)
+            {
+                Status = "Scanning out " + total + " expired items";
+                yield return StartCoroutine(MoveTo(store.BackPickNear(null)));
+                yield return StartCoroutine(DoWork(1f + total * 0.03f));
+            }
+        }
+
         Fixture FindBakeryShelf()
         {
             Fixture best = null;
@@ -508,7 +577,7 @@ namespace StoreManager
             {
                 var f = all[i];
                 if (!f.IsBakeryShelf || f.Product == null || f.Removed || f.ClaimedBy != null) continue;
-                if (f.Fill < bestFill) { bestFill = f.Fill; best = f; }
+                if (f.FreshFill < bestFill) { bestFill = f.FreshFill; best = f; }
             }
             return best;
         }
@@ -548,7 +617,11 @@ namespace StoreManager
                     Status = "Putting out " + p.Name;
                     yield return StartCoroutine(MoveTo(shelf.AccessTile(Store.I.Grid)));
                     yield return StartCoroutine(DoWork(1.5f + batch * 0.15f));
-                    if (!shelf.Removed && shelf.Product == p) cart.MoveTo(shelf.Stock, cart.Total);
+                    if (!shelf.Removed && shelf.Product == p)
+                    {
+                        Store.I.WriteOff(p, shelf.Stock.RemoveExpired());
+                        cart.MoveTo(shelf.Stock, Mathf.Min(cart.Total, Mathf.Max(0, shelf.Def.Capacity - shelf.Stock.Total)));
+                    }
                     cart.Clear();
                     cartProduct = null;
                 }
@@ -618,8 +691,8 @@ namespace StoreManager
                         continue;
                     }
                 }
-                bool empty = station.Stock.Total == 0;
-                if ((empty || (station.Waiting.Count == 0 && station.Fill < 0.5f)) && station.Product.Back.Total > 0
+                bool empty = station.Stock.FreshTotal == 0;
+                if ((empty || (station.Waiting.Count == 0 && station.FreshFill < 0.5f)) && station.Product.Back.FreshTotal > 0
                     && (station.ClaimedBy == null || station.ClaimedBy == this))
                 {
                     var f = station;

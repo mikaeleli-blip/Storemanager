@@ -46,6 +46,8 @@ namespace StoreManager
         public bool HoldsProducts { get { return IsShelf || IsCounter; } }
         public bool IsBakeryShelf { get { return Def.Id == "bakery_shelf"; } }
         public float Fill { get { return Def.Capacity > 0 ? Mathf.Clamp01(Stock.Total / (float)Def.Capacity) : 0f; } }
+        /// <summary>Fill counting only in-date stock.</summary>
+        public float FreshFill { get { return Def.Capacity > 0 ? Mathf.Clamp01(Stock.FreshTotal / (float)Def.Capacity) : 0f; } }
         public Vector3 Center { get { return Placement.Point(Def, Origin, Rot, Def.W * 0.5f, Def.D * 0.5f); } }
 
         public string Label

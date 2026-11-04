@@ -51,10 +51,10 @@ manager and grow the store.
 - The desktop has app icons, draggable windows and a taskbar (get up, build,
   open apps, game speed, clock). Widgets on the right show today's numbers,
   level progress, alerts and the latest messages.
-- Apps, all only here: **Shop** (buy stock), **Products** (prices and stock
-  levels), **Licences**, **Staff**, **Hiring**, **Assistant** (delegation),
-  **Stats** (today and the last 7 days), **Expansion**, **Inbox** (all
-  messages).
+- Apps, all only here: **Shop** (order stock), **Bills** (supplier invoices),
+  **Products** (prices, stock and expiry), **Licences**, **Staff**, **Hiring**,
+  **Assistant** (delegation), **Stats** (today and the last 7 days),
+  **Expansion**, **Inbox** (all messages).
 - **Build** leaves the screen for the overhead camera: **WASD** pans over the
   whole store, Q/E rotate, wheel zooms; place fixtures and pick shelf products.
   **Esc** goes back to the computer.
@@ -69,13 +69,13 @@ manager and grow the store.
   level and costs money; some need another licence first.
 - **Department licences** unlock a new fixture type plus its first products
   (and a staff role where needed). Later licences add more products to it.
-- You start with **Basic Groceries** (pasta, canned soup, soft drinks,
+- You start with **Basic Groceries** (pasta, canned soup, two colas,
   snacks): gondola shelves and checkouts only.
 
 | Licence | Level | Cost | Unlocks |
 |---|---|---|---|
-| Basic Groceries | 1 | free | Pasta, Canned Soup, Soft Drinks, Snacks; shelves, checkouts |
-| Pantry Staples | 2 | $1,200 | Rice, Cereal |
+| Basic Groceries | 1 | free | Pasta, Canned Soup, Bubbla Cola, Zing Cola, Snacks; shelves, checkouts |
+| Pantry Staples | 2 | $1,200 | Rice, Cereal, Sliced Bread |
 | Produce Department | 2 | $2,500 | Produce tables; Apples, Bananas, Potatoes |
 | Coffee | 3 | $1,500 | Coffee |
 | Dairy Department | 3 | $4,000 | Fridges; Milk, Eggs, Yogurt |
@@ -83,7 +83,7 @@ manager and grow the store.
 | Household Department | 4 | $2,500 | Toilet Paper, Dish Soap |
 | Frozen Food | 5 | $3,500 | Frozen Pizza, Ice Cream (needs Dairy) |
 | Cheese | 5 | $1,500 | Cheese (needs Dairy) |
-| Bakery Department | 6 | $8,000 | Oven, bakery shelves, bakers; Bread, Croissants |
+| Bakery Department | 6 | $8,000 | Oven, bakery shelves, bakers; Fresh Bread, Croissants |
 | Cleaning & Batteries | 6 | $2,000 | Detergent, Batteries (needs Household) |
 | Deli Department | 7 | $12,000 | Deli counters, deli clerks; Sliced Ham, Chicken |
 | Cakes | 8 | $3,000 | Cakes (needs Bakery) |
@@ -137,11 +137,46 @@ floor is placed by you, from the **office desk** (Build tab):
 - Stock lives on the fixtures and in the **back room**. Stockers move it from
   the back to the emptiest shelves. Perishables age each night and expire.
 - **Ordering is a shopping cart** (Shop app): the catalogue lists every
-  licensed product with its case size, case price and current stock (shelf,
-  back room, on the way). Add cases, then pay: delivery by the **06:00 truck**,
-  or **express** in about an hour for 25% more (handy for opening day).
-- Orders are paid at checkout. The cart can't be bigger than the free
-  back-room space (stock already on the way counts).
+  licensed product by supplier, with case size, case price, shelf life, stock
+  (shelf, back room, on the way) and average daily sales. Add cases, then
+  order: each supplier delivers on its own next delivery day at 06:00, or
+  **express** in about an hour for 25% more (handy for opening day).
+- The cart can't be bigger than the free back-room space (stock already on
+  the way counts). Weekends are busier (Fri/Sat) than Sun-Tue.
+
+## Suppliers, bills and expiry
+
+| Supplier | Sells | Delivers | Bills due | Min order | Expired stock back |
+|---|---|---|---|---|---|
+| Central Warehouse | dry goods, produce, frozen, household | every day | 10 days | - | no credit |
+| Bubbla Beverages | Bubbla Cola | Mon, Wed, Fri | 14 days | $100 | 100% credit |
+| Zing Drinks | Zing Cola | Tue, Thu, Sat | 14 days | $100 | 100% credit |
+| Valley Dairy Co-op | milk, eggs, yogurt, cheese | Mon-Sat | 7 days | $60 | 75% credit |
+| Millhouse Bakery | sliced bread | every day | 7 days | $40 | 100% credit |
+| Fjord Meats | deli meats, salads | Mon, Thu | 7 days | $150 | 50% credit |
+
+- **Bills (reikningar):** every delivery comes with an invoice; nothing is
+  paid when ordering. Pay them in the Bills app (one by one, or everything due
+  within 3 days). Overdue: a 5% late fee; 7 days overdue: the supplier stops
+  taking orders until paid. Each supplier also has a **credit limit** (what
+  you may owe, including orders on the way), which grows with store level.
+  The assistant manager can be delegated to pay bills due today or tomorrow.
+- **Expiry:** stock arrives with a best-before date (often with part of its
+  shelf life already used). Expired stock **stays on the shelf** until staff
+  scan it out. Customers who pick up an expired item get upset and may
+  complain; they never buy it. A quarter of shoppers take the freshest date
+  from the back, which leaves older stock to expire.
+- **Date checks:** stockers pull expired stock from every shelf they refill
+  and from the back room. Staff app setting: only when restocking, a date-check
+  round once a day (before opening if there's a night stocker), or every
+  shift. Rounds cover slow sellers too but take time from restocking. Bakers
+  clear old bakery stock when they put out a fresh batch.
+- **Returns (endursending):** scanned-out stock from a supplier with a returns
+  policy goes back with that supplier's next delivery, and the credit comes
+  off their next bill. The in-store bakery and the warehouse give nothing back.
+- In headless runs a well-run store wastes little: most perishables sell
+  within a day or two. Waste shows up in the bakery, on meat (deliveries only
+  Mon and Thu) and when you over-order.
 
 ## Staff
 
@@ -166,9 +201,11 @@ floor is placed by you, from the **office desk** (Build tab):
 One employee can be the assistant manager. While on shift they walk the
 store (staff near them work 5% faster) and do the jobs you delegate:
 
-- **Ordering:** an hour before their shift ends, buys stock for the 06:00
-  truck: about two days of sales of everything on sale, within back-room
-  space and cash. Low leadership means less accurate orders.
+- **Ordering:** an hour before their shift ends, orders everything on sale
+  to last until each supplier's delivery after next, within back-room space,
+  credit limits and minimum orders. Low leadership means less accurate orders.
+- **Bills:** pays supplier bills due today or tomorrow (keeps $300 in the
+  till).
 - **Complaints:** walks over to complaining customers (less effective than
   you).
 - **Checkouts:** jumps on a free till when queues get long.
@@ -190,10 +227,11 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 ## Economy
 
 - Cash, daily ledger: sales, wholesale, wages, rent, construction, waste.
-- **Orders** are paid at checkout and arrive by truck at 06:00 (or express).
-  The back room holds 5,000 units (+2,000 per expansion). If a delivery still
-  doesn't fit (for example after clearing shelves into the back), every
-  product gets a fair share and the rest is refunded.
+- **Orders** arrive with each supplier's truck at 06:00 (or express) and are
+  billed on delivery (see Suppliers, bills and expiry). The back room holds
+  5,000 units (+2,000 per expansion). If a delivery still doesn't fit (for
+  example after clearing shelves into the back), every product gets a fair
+  share and the rest goes back on the truck (not billed).
 - Rent is charged every midnight and grows with expansion.
 - Start with $20,000, a cashier for each shift and a morning stocker. Rent
   $350/day. A starter shop (2 checkouts, 6 shelves) plus express opening stock

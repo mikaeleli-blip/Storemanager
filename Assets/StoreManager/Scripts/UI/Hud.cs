@@ -185,6 +185,15 @@ namespace StoreManager
             if (clk.Hour >= 18 && store.OnOrderTotal == 0 && carried > 0 && !(store.Delegation.Ordering && store.Staff.Assistant != null))
                 alerts.Add("<color=#ffcc55>Nothing ordered for tomorrow's truck (Shop app).</color>");
             if (store.Economy.Cash < 0f) alerts.Add("<color=#ff6655>The store is in the red.</color>");
+
+            int overdue = store.OverdueCount;
+            if (overdue > 0) alerts.Add("<color=#ff6655>" + overdue + " bills are overdue (Bills app).</color>");
+            float due = store.DueWithin(1);
+            if (overdue == 0 && due > 0f) alerts.Add("<color=#ffcc55>Bills due by tomorrow: " + Money(due) + ".</color>");
+            for (int i = 0; i < store.Suppliers.Count; i++)
+                if (store.Suppliers[i].OnHold) alerts.Add("<color=#ff6655>" + store.Suppliers[i].Name + " has stopped taking orders.</color>");
+            if (store.Economy.Today.ExpiredFound > 0)
+                alerts.Add("<color=#ff8866>Customers found expired products " + store.Economy.Today.ExpiredFound + " times today.</color>");
         }
 
         // ------------------------------------------------------------------ drawing
@@ -558,6 +567,13 @@ namespace StoreManager
                 if (staff.All[i] != null) wages += staff.All[i].Wage * 8f * (staff.All[i].Shift == Shift.Night ? 1.25f : 1f);
             GUILayout.Label(staff.All.Count + " staff. Wages about " + Money(wages) + " a day.", rich);
             GUILayout.Label("Click Role, Shift or Restocks to change them.", small);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Date checks", bold, W(100));
+            int dc = GUILayout.Toolbar((int)store.DateChecks, new[] { "Only when restocking", "Once a day", "Every shift" }, W(420));
+            store.DateChecks = (DateCheckPolicy)dc;
+            GUILayout.EndHorizontal();
+            GUILayout.Label("Stockers always pull expired stock from shelves they refill. Date-check rounds also cover every shelf with perishables "
+                + "(slow sellers too), but take time away from restocking. Expired items left out upset customers.", small);
             GUILayout.Space(4f);
 
             var list = staff.All.ToArray();
@@ -678,6 +694,7 @@ namespace StoreManager
             del.Complaints = GUILayout.Toggle(del.Complaints, " Complaints: go and calm down customers who want the manager.");
             del.Checkouts = GUILayout.Toggle(del.Checkouts, " Checkouts: open a till when queues get long.");
             del.Morale = GUILayout.Toggle(del.Morale, " Staff morale: chat with staff while walking the floor.");
+            del.Bills = GUILayout.Toggle(del.Bills, " Bills: pay supplier bills that are due today or tomorrow (keeps $300 in the till).");
             GUILayout.Space(8f);
             GUILayout.Label("Lower leadership means less accurate orders and less effective complaint handling. Staff near the assistant work a little faster.", small);
         }
@@ -706,7 +723,7 @@ namespace StoreManager
         void FinancesTab()
         {
             GUILayout.BeginHorizontal();
-            string[] heads = { "Day", "Sales", "Wholesale", "Wages", "Rent", "Building", "Profit", "Customers", "Satisf.", "Waste" };
+            string[] heads = { "Day", "Sales", "Bills paid", "Wages", "Rent", "Building", "Profit", "Customers", "Satisf.", "Binned" };
             for (int i = 0; i < heads.Length; i++) GUILayout.Label("<b>" + heads[i] + "</b>", rich, W(i == 0 ? 50f : 80f));
             GUILayout.EndHorizontal();
 
@@ -729,11 +746,12 @@ namespace StoreManager
                 GUILayout.Label("<color=" + col + ">" + Money(d.Profit) + "</color>", rich, W(80));
                 GUILayout.Label(d.Customers.ToString(), W(80));
                 GUILayout.Label(d.Customers > 0 ? d.AvgSatisfaction.ToString("0") : "-", W(80));
-                GUILayout.Label(Money(d.WasteValue), W(80));
+                GUILayout.Label(d.WrittenOff > 0 ? Money(d.WasteValue) : "-", W(80));
                 GUILayout.EndHorizontal();
             }
             GUILayout.Space(8f);
-            GUILayout.Label("Cash " + Money(store.Economy.Cash) + ".  Building includes fixtures bought (and refunds when sold). Waste is stock that expired.", small);
+            GUILayout.Label("Cash " + Money(store.Economy.Cash) + ".  Bills paid = supplier bills paid that day (plus bakery ingredients). Building includes fixtures and licences. "
+                + "Binned = expired stock scanned out, at cost (part of it comes back as supplier credit).  Unpaid bills: " + Money(store.UnpaidTotal) + ".", small);
         }
     }
 }

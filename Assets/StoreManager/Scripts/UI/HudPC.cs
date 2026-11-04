@@ -9,22 +9,23 @@ namespace StoreManager
     /// </summary>
     public partial class Hud
     {
-        public enum App { Shop, Products, Licences, Staff, Hiring, Assistant, Stats, Expansion, Inbox }
-        public const int AppCount = 9;
-        static readonly string[] AppNames = { "Shop", "Products", "Licences", "Staff", "Hiring", "Assistant", "Stats", "Expansion", "Inbox" };
+        public enum App { Shop, Bills, Products, Licences, Staff, Hiring, Assistant, Stats, Expansion, Inbox }
+        public const int AppCount = 10;
+        static readonly string[] AppNames = { "Shop", "Bills", "Products", "Licences", "Staff", "Hiring", "Assistant", "Stats", "Expansion", "Inbox" };
         static readonly string[] AppTitles =
         {
-            "Wholesale shop", "Products & prices", "Licences", "Staff", "Hiring", "Assistant manager", "Statistics", "Expansion", "Inbox",
+            "Ordering: warehouse and suppliers", "Bills (reikningar)", "Products & prices", "Licences", "Staff", "Hiring", "Assistant manager",
+            "Statistics", "Expansion", "Inbox",
         };
         static readonly Color[] AppColors =
         {
-            Mats.Hex("#2f9e6a"), Mats.Hex("#d08a2c"), Mats.Hex("#b8913a"), Mats.Hex("#3f7fd0"), Mats.Hex("#6a5acd"),
+            Mats.Hex("#2f9e6a"), Mats.Hex("#a8432f"), Mats.Hex("#d08a2c"), Mats.Hex("#b8913a"), Mats.Hex("#3f7fd0"), Mats.Hex("#6a5acd"),
             Mats.Hex("#c0566b"), Mats.Hex("#2a9db0"), Mats.Hex("#7a8a3a"), Mats.Hex("#5d6b7d"),
         };
         static readonly Color BuildColor = Mats.Hex("#d9573b");
         static readonly Vector2[] AppSizes =
         {
-            new Vector2(1080f, 720f), new Vector2(980f, 680f), new Vector2(1020f, 660f), new Vector2(1080f, 620f), new Vector2(980f, 620f),
+            new Vector2(1100f, 740f), new Vector2(1000f, 680f), new Vector2(1000f, 680f), new Vector2(1020f, 660f), new Vector2(1080f, 620f), new Vector2(980f, 620f),
             new Vector2(720f, 460f), new Vector2(980f, 660f), new Vector2(640f, 340f), new Vector2(720f, 560f),
         };
 
@@ -123,6 +124,8 @@ namespace StoreManager
         {
             new[] { "............", "##..........", ".#..........", ".##########.", ".#++++++++#.", ".#++++++++#.",
                     "..#++++++#..", "..########..", "..#.........", "..#########.", "...##...##..", "...##...##.." },
+            new[] { "..########..", "..#++++++#..", "..#+####+#..", "..#++++++#..", "..#+###++#..", "..#++++++#..",
+                    "..#+####+#..", "..#++++++#..", "..#++oooo#..", "..#++++++#..", "..##+##+##..", "..#..#..#..." },
             new[] { "............", "............", "...#########", "..#++++++++#", ".#++#+#+##+#", "#+o+#+#+##+#",
                     ".#++#+#+##+#", "..#++++++++#", "...#########", "............", "............", "............" },
             new[] { "#########...", "#+++++++#...", "#+#####+#...", "#+++++++#...", "#+####++#...", "#+++++++#...",
@@ -306,7 +309,8 @@ namespace StoreManager
             GUILayout.Label("Sales " + Money(t.Sales) + "   Profit " + (t.Profit >= 0f ? "<color=#9dff9d>" : "<color=#ff7766>") + Money(t.Profit) + "</color>", rich);
             GUILayout.Label("Customers " + t.Customers + "   In store now " + store.Customers.Count, rich);
             GUILayout.Label("Satisfaction " + (t.Customers > 0 ? MoraleText(t.AvgSatisfaction) : "-") + "   Reputation " + MoraleText(store.Reputation), rich);
-            GUILayout.Label("Cash <b>" + Money(store.Economy.Cash) + "</b>", rich);
+            float dueSoon = store.DueWithin(2);
+            GUILayout.Label("Cash <b>" + Money(store.Economy.Cash) + "</b>" + (dueSoon > 0f ? "   Bills due soon " + (store.OverdueCount > 0 ? "<color=#ff6655>" : "<color=#ffcc55>") + Money(dueSoon) + "</color>" : ""), rich);
             GUILayout.Space(4f);
             GUILayout.Label(LevelText(), bold);
             GUILayout.EndArea();
@@ -411,6 +415,7 @@ namespace StoreManager
                 w.Scroll = GUILayout.BeginScrollView(w.Scroll);
                 switch (w.App)
                 {
+                    case App.Bills: BillsApp(); break;
                     case App.Products: ProductsApp(); break;
                     case App.Licences: LicencesTab(); break;
                     case App.Staff: StaffTab(); break;
@@ -438,35 +443,42 @@ namespace StoreManager
             var cart = store.Cart;
             GUILayout.BeginHorizontal();
 
-            // Catalogue
+            // Catalogue, by supplier
             GUILayout.BeginVertical(W(width * 0.62f));
             GUILayout.Label("Catalogue", header);
-            GUILayout.Label("Prices are per case. Add cases to the cart, then pay: the truck comes at 06:00, express in about an hour (+25%).", small);
+            GUILayout.Label("Prices are per case; \"3d\" = shelf life in days, \"~40/day\" = average sold over the last week. Each supplier delivers on its own days at 06:00; "
+                + "express comes in about an hour (+25%). Every delivery comes with a bill (Bills app). Weekends are busier than Mon-Tue.", small);
             w.Scroll = GUILayout.BeginScrollView(w.Scroll);
             bool anyLocked = false;
-            for (int c = 0; c < store.Categories.Count; c++)
+            for (int si = 0; si < store.Suppliers.Count; si++)
             {
-                var cat = store.Categories[c];
-                if (cat.Def.Baked) continue;
+                var sup = store.Suppliers[si];
                 bool header0 = false;
-                for (int i = 0; i < cat.Products.Count; i++)
+                for (int i = 0; i < store.Products.Count; i++)
                 {
-                    var p = cat.Products[i];
+                    var p = store.Products[i];
+                    if (p.Def.Supplier != sup.Def) continue;
                     if (!store.IsLicensed(p.Def)) { anyLocked = true; continue; }
                     if (!header0)
                     {
-                        GUILayout.Space(4f);
-                        GUILayout.Label("<color=#" + ColorUtility.ToHtmlStringRGB(cat.Def.Color) + ">■</color> <b>" + cat.Name + "</b>", rich);
+                        GUILayout.Space(6f);
+                        GUILayout.Label("<b>" + sup.Name + "</b>" + (sup.OnHold ? "  <color=#ff6655>ON HOLD: unpaid bills</color>" : ""), rich);
+                        GUILayout.Label("Delivers " + sup.Def.DaysText + " (next " + store.DayText(store.NextDelivery(sup.Def)) + ")"
+                            + "  ·  bills due in " + sup.Def.TermsDays + " days"
+                            + (sup.Def.MinOrder > 0f ? "  ·  min order " + Money(sup.Def.MinOrder) : "")
+                            + "  ·  credit left " + Money(store.CreditLeft(sup)) + " of " + Money(store.CreditLimit(sup))
+                            + "  ·  " + (sup.Def.ReturnCredit > 0f ? Mathf.RoundToInt(sup.Def.ReturnCredit * 100f) + "% credit for expired" : "no returns"), small);
                         header0 = true;
                     }
                     int cs = p.Def.CaseSize, inCart = cart.CasesOf(p);
                     GUILayout.BeginHorizontal();
-                    GUILayout.Label(p.Name, bold, W(120));
-                    GUILayout.Label(cs + " / case  " + Money(Store.CaseCost(p, false)), small, W(118));
+                    GUILayout.Label(p.Name, bold, W(118));
+                    GUILayout.Label(cs + "/case " + Money(Store.CaseCost(p, false)) + (p.Life > 0 ? "  " + p.Life + "d" : ""), small, W(122));
                     string stock = p.Carried
-                        ? "shelf " + p.ShelfTotal + "/" + p.ShelfCap + "  back " + p.Back.Total + (p.Incoming > 0 ? "  coming " + p.Incoming : "")
+                        ? "shelf " + p.ShelfTotal + "  back " + p.Back.Total + (p.Incoming > 0 ? "  coming " + p.Incoming : "")
+                            + "  ~" + Mathf.RoundToInt(p.AvgSold) + "/day"
                         : "<color=#ffcc55>not on a shelf yet</color>" + (p.Back.Total > 0 ? "  back " + p.Back.Total : "");
-                    GUILayout.Label(stock, small, W(210));
+                    GUILayout.Label(stock, small, W(208));
                     GUI.enabled = inCart > 0;
                     if (GUILayout.Button("-", W(26))) cartOps.Add(new KeyValuePair<Product, int>(p, -1));
                     GUI.enabled = true;
@@ -486,19 +498,29 @@ namespace StoreManager
 
             GUILayout.Space(12f);
 
-            // Cart
+            // Cart, by supplier
             GUILayout.BeginVertical("box");
             GUILayout.Label("Cart  <size=12>" + cart.Cases + " cases, " + cart.Units + " units</size>", header);
-            w.Scroll2 = GUILayout.BeginScrollView(w.Scroll2, GUILayout.Height(Mathf.Max(120f, height - 330f)));
+            w.Scroll2 = GUILayout.BeginScrollView(w.Scroll2, GUILayout.Height(Mathf.Max(140f, height - 330f)));
             if (cart.Lines.Count == 0) GUILayout.Label("Empty. Use + in the catalogue.", small);
-            for (int i = 0; i < cart.Lines.Count; i++)
+            for (int si = 0; si < store.Suppliers.Count; si++)
             {
-                var l = cart.Lines[i];
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(l.Product.Name + "  x" + l.Cases, W(150));
-                GUILayout.Label(Money(l.Cases * Store.CaseCost(l.Product, false)), W(80));
-                if (GUILayout.Button("x", W(24))) cartOps.Add(new KeyValuePair<Product, int>(l.Product, -l.Cases));
-                GUILayout.EndHorizontal();
+                var sup = store.Suppliers[si];
+                float sub = cart.SupplierCost(sup.Def, false);
+                if (sub <= 0f) continue;
+                bool underMin = sub < sup.Def.MinOrder;
+                GUILayout.Label("<b>" + sup.Name + "</b>  " + Money(sub) + "  ·  arrives " + store.DayText(store.NextDelivery(sup.Def))
+                    + (underMin ? "  <color=#ff9977>(min " + Money(sup.Def.MinOrder) + ")</color>" : ""), rich);
+                for (int i = 0; i < cart.Lines.Count; i++)
+                {
+                    var l = cart.Lines[i];
+                    if (l.Product.Def.Supplier != sup.Def) continue;
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("   " + l.Product.Name + "  x" + l.Cases, W(150));
+                    GUILayout.Label(Money(l.Cases * Store.CaseCost(l.Product, false)), W(80));
+                    if (GUILayout.Button("x", W(24))) cartOps.Add(new KeyValuePair<Product, int>(l.Product, -l.Cases));
+                    GUILayout.EndHorizontal();
+                }
             }
             GUILayout.EndScrollView();
 
@@ -508,34 +530,115 @@ namespace StoreManager
                 + "  <size=11>(stock on the way counts)</size>", rich);
             GUILayout.Space(4f);
 
-            string truckProblem = store.CheckoutProblem(cart, false), expressProblem = store.CheckoutProblem(cart, true);
+            string truckProblem = store.OrderProblem(cart, false), expressProblem = store.OrderProblem(cart, true);
             GUI.enabled = truckProblem == null;
-            if (GUILayout.Button("Pay " + Money(cart.Cost(false)) + "  ·  truck at 06:00", GUILayout.Height(32f)))
-                store.Checkout(cart, false);
+            if (GUILayout.Button("Order " + Money(cart.Cost(false)) + "  ·  on each supplier's next delivery", GUILayout.Height(32f)))
+                store.PlaceOrder(cart, false);
             GUI.enabled = expressProblem == null;
-            if (GUILayout.Button("Pay " + Money(cart.Cost(true)) + "  ·  express, ~1 hour", GUILayout.Height(32f)))
-                store.Checkout(cart, true);
+            if (GUILayout.Button("Order " + Money(cart.Cost(true)) + "  ·  express, ~1 hour", GUILayout.Height(32f)))
+                store.PlaceOrder(cart, true);
             GUI.enabled = cart.Lines.Count > 0;
             if (GUILayout.Button("Empty cart")) clearCart = true;
             GUI.enabled = true;
             string problem = cart.Lines.Count == 0 ? null : truckProblem ?? expressProblem;
             if (problem != null) GUILayout.Label("<color=#ff9977>" + problem + "</color>", small);
+            GUILayout.Label("You pay later: each delivery brings a bill.", small);
 
             GUILayout.Space(6f);
-            int truck = 0, express = 0;
-            for (int i = 0; i < store.Products.Count; i++) { truck += store.Products[i].OnOrder; express += store.Products[i].OnExpress; }
-            GUILayout.Label("On the way: " + truck + " units on the 06:00 truck"
-                + (express > 0 ? ", " + express + " by express (about " + Mathf.CeilToInt(store.ExpressMinutesLeft) + " min)" : "") + ".", small);
-            GUILayout.Label("Cash " + Money(store.Economy.Cash), bold);
+            int express = 0;
+            for (int i = 0; i < store.Products.Count; i++) express += store.Products[i].OnExpress;
+            var coming = new List<string>();
+            for (int i = 0; i < store.Suppliers.Count; i++)
+                if (store.Suppliers[i].PendingDay >= 0) coming.Add(store.Suppliers[i].Name + " " + store.DayText(store.Suppliers[i].PendingDay));
+            GUILayout.Label("On the way: " + (coming.Count > 0 ? string.Join(", ", coming.ToArray()) : "nothing by truck")
+                + (express > 0 ? "; " + express + " units by express (about " + Mathf.CeilToInt(store.ExpressMinutesLeft) + " min)" : "") + ".", small);
             GUILayout.EndVertical();
 
             GUILayout.EndHorizontal();
         }
 
+        void BillsApp()
+        {
+            int day = store.Clock.Day;
+            GUILayout.Label("Bills", header);
+            GUILayout.Label("Unpaid " + Money(store.UnpaidTotal) + "   ·   due within 3 days " + Money(store.DueWithin(3))
+                + "   ·   " + (store.OverdueCount > 0 ? "<color=#ff6655>" + store.OverdueCount + " overdue</color>" : "none overdue")
+                + "   ·   cash " + Money(store.Economy.Cash), rich);
+            GUILayout.Label("Overdue bills get a " + Mathf.RoundToInt(Store.LateFeeShare * 100f) + "% late fee. After " + Store.HoldAfterDays
+                + " days overdue the supplier stops taking orders. Each supplier only lets you owe up to a credit limit (grows with store level): "
+                + "pay early to order more. The assistant manager can pay bills (Assistant app).", small);
+            GUILayout.BeginHorizontal();
+            GUI.enabled = store.DueWithin(3) > 0f;
+            if (GUILayout.Button("Pay everything due within 3 days", W(260)))
+            {
+                int n = store.PayBillsDueWithin(3, 0f);
+                Toast(n > 0 ? "Paid " + n + " bills." : "Not enough cash to pay them.");
+            }
+            GUI.enabled = true;
+            GUILayout.EndHorizontal();
+            GUILayout.Space(8f);
+
+            GUILayout.Label("Suppliers", bold);
+            for (int i = 0; i < store.Suppliers.Count; i++)
+            {
+                var s = store.Suppliers[i];
+                float owed = 0f;
+                for (int k = 0; k < store.Invoices.Count; k++)
+                    if (!store.Invoices[k].Paid && store.Invoices[k].Supplier == s) owed += store.Invoices[k].Amount;
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(s.Name, W(160));
+                GUILayout.Label(s.Def.DaysText, small, W(100));
+                GUILayout.Label("owed " + Money(owed) + " / limit " + Money(store.CreditLimit(s)), W(170));
+                GUILayout.Label(s.Credit > 0f ? "credit " + Money(s.Credit) : "", W(100));
+                GUILayout.Label(s.ReturnsUnits > 0 ? s.ReturnsUnits + " items to return (" + Money(s.ReturnsValue) + ")" : "", small, W(190));
+                GUILayout.Label(s.OnHold ? "<color=#ff6655>ON HOLD</color>" : "<color=#9dff9d>ok</color>", rich, W(70));
+                GUILayout.EndHorizontal();
+            }
+            GUILayout.Space(8f);
+
+            GUILayout.Label("Unpaid", bold);
+            var unpaid = new List<Invoice>();
+            for (int i = 0; i < store.Invoices.Count; i++) if (!store.Invoices[i].Paid) unpaid.Add(store.Invoices[i]);
+            unpaid.Sort((a, b) => a.DueDay.CompareTo(b.DueDay));
+            if (unpaid.Count == 0) GUILayout.Label("Nothing to pay.", small);
+            for (int i = 0; i < unpaid.Count; i++)
+            {
+                var inv = unpaid[i];
+                int left = inv.DueDay - day;
+                string due = left < 0 ? "<color=#ff6655>" + (-left) + " days overdue</color>"
+                    : left == 0 ? "<color=#ffcc55>due today</color>" : left == 1 ? "<color=#ffcc55>due tomorrow</color>" : "due in " + left + " days";
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("#" + inv.Number, W(52));
+                GUILayout.Label(inv.Supplier.Name + (inv.Express ? " (express)" : ""), W(190));
+                GUILayout.Label(inv.Units + " units, day " + inv.IssuedDay, small, W(120));
+                GUILayout.Label(due, rich, W(130));
+                string extra = (inv.CreditUsed > 0f ? " -" + Money(inv.CreditUsed) + " credit" : "") + (inv.LateFee > 0f ? " +" + Money(inv.LateFee) + " fee" : "");
+                GUILayout.Label("<b>" + Money(inv.Amount) + "</b><size=11>" + extra + "</size>", rich, W(170));
+                GUI.enabled = store.Economy.Cash >= inv.Amount;
+                if (GUILayout.Button("Pay", W(60))) store.PayInvoice(inv);
+                GUI.enabled = true;
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.Space(8f);
+            GUILayout.Label("Paid recently", bold);
+            int shown = 0;
+            for (int i = store.Invoices.Count - 1; i >= 0 && shown < 12; i--)
+            {
+                var inv = store.Invoices[i];
+                if (!inv.Paid) continue;
+                shown++;
+                GUILayout.Label("<color=#999999>#" + inv.Number + "  " + inv.Supplier.Name + "  " + Money(inv.Amount) + "  paid day " + inv.PaidDay
+                    + (inv.PaidDay > inv.DueDay ? " (late)" : "") + "</color>", rich);
+            }
+            if (shown == 0) GUILayout.Label("None yet.", small);
+        }
+
         void ProductsApp()
         {
             GUILayout.Label("Products & prices", header);
-            GUILayout.Label("Click a shelf in Build to choose what it holds. Buy stock in the Shop app. Higher prices earn more per item, but some customers won't buy.", small);
+            GUILayout.Label("Click a shelf in Build to choose what it holds. Order stock in the Shop app. Higher prices earn more per item, but some customers won't buy. "
+                + "Expired = out of date and still in the store (\"soon\" = expires tonight). Binned = scanned out today.", small);
             GUILayout.Space(6f);
             for (int c = 0; c < store.Categories.Count; c++)
             {
@@ -554,8 +657,8 @@ namespace StoreManager
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                string[] heads = { "Product", "Price", "Shelves", "On shelf", "Back", "Coming", "Sold", "Missed", "Waste" };
-                float[] widths = { 120f, 60f, 60f, 74f, 56f, 60f, 48f, 56f, 50f };
+                string[] heads = { "Product", "Price", "Shelves", "On shelf", "Back", "Coming", "Sold", "Missed", "Expired", "Binned" };
+                float[] widths = { 120f, 60f, 58f, 70f, 52f, 58f, 44f, 54f, 60f, 54f };
                 for (int k = 0; k < heads.Length; k++) GUILayout.Label("<b>" + heads[k] + "</b>", rich, W(widths[k]));
                 GUILayout.EndHorizontal();
 
@@ -582,7 +685,9 @@ namespace StoreManager
                     GUILayout.Label(p.Baked ? "-" : p.Incoming.ToString(), W(widths[5]));
                     GUILayout.Label(p.SoldToday.ToString(), W(widths[6]));
                     GUILayout.Label(p.MissedToday.ToString(), W(widths[7]));
-                    GUILayout.Label(p.WastedLastNight.ToString(), W(widths[8]));
+                    int exp = p.ExpiredOnHand, soon = p.ExpiringSoon(1);
+                    GUILayout.Label(p.Life <= 0 ? "-" : exp > 0 ? "<color=#ff7766>" + exp + "</color>" : soon > 0 ? "<color=#ffd166>" + soon + " soon</color>" : "0", rich, W(widths[8]));
+                    GUILayout.Label(p.BinnedToday.ToString(), W(widths[9]));
                     GUILayout.EndHorizontal();
                 }
                 GUILayout.EndVertical();

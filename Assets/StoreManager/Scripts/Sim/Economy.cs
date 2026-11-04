@@ -5,7 +5,11 @@ namespace StoreManager
     public class DayLedger
     {
         public int Day;
-        public float Sales, Wholesale, Wages, Rent, Construction, WasteValue;
+        public float Sales, Wholesale, Wages, Rent, Construction;
+        public float WasteValue;          // expired stock scanned out, at cost
+        public float ReturnCredit;        // part of that going back to suppliers for credit
+        public float LateFees;
+        public int WrittenOff, ExpiredFound;
         public int Customers, Walkouts, Complaints, ComplaintsResolved, ItemsSold;
         public float SatisfactionSum;
         public readonly Dictionary<string, int> NotCarried = new Dictionary<string, int>();
@@ -71,5 +75,6 @@ namespace StoreManager
         public bool Complaints = true;
         public bool Checkouts = true;
         public bool Morale = true;
+        public bool Bills = true;
     }
 }

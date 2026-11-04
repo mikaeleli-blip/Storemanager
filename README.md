@@ -47,5 +47,6 @@ Tools/Headless/  simulation harness (run.sh)
 `Tools/Headless/run.sh [days] [scripted|idle] [seed]` compiles the game scripts
 against a small fake UnityEngine and simulates whole days without Unity,
 printing each day's ledger and what upset customers. Needs Mono. The
-`scripted` mode is an auto-player that buys licences, places fixtures, hires
-and expands as money and levels allow.
+`scripted` mode is an auto-player that buys licences, places fixtures, orders
+from suppliers, pays bills, hires and expands as money and levels allow. A 4th
+argument `overstock` makes it over-order with date checks off (expiry test).

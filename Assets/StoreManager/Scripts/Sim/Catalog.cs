@@ -18,6 +18,7 @@ namespace StoreManager
         public int CaseSize;
         public CategoryDef Category;
         public LicenceDef Licence;
+        public SupplierDef Supplier;   // null = baked in the store
 
         public ProductDef(string name, float cost, float price, int life, float demand, int caseSize)
         {
@@ -26,6 +27,56 @@ namespace StoreManager
     }
 
     /// <summary>A product category: what it sells, which fixture it goes on, and who it needs.</summary>
+    public enum SupplierKind { Warehouse, Direct }
+
+    /// <summary>
+    /// Where stock comes from: the central warehouse (most things, every day) or a direct supplier
+    /// (soda, dairy, bread, meat) with its own delivery days, minimum order, payment terms and returns policy.
+    /// </summary>
+    public class SupplierDef
+    {
+        public string Id, Name, Description;
+        public SupplierKind Kind;
+        public readonly bool[] Days = new bool[7];   // Mon..Sun
+        public int TermsDays;                         // invoice due this many days after delivery
+        public float ReturnCredit;                    // share of cost credited for expired stock sent back
+        public float MinOrder;                        // per truck order
+        public float CreditBase, CreditPerLevel;      // most you can owe them: base + per store level
+
+        static readonly string[] DayNames = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+
+        public string DaysText
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < 7; i++) if (Days[i]) n++;
+                if (n == 7) return "every day";
+                if (n == 6 && !Days[6]) return "Mon-Sat";
+                var list = new List<string>();
+                for (int i = 0; i < 7; i++) if (Days[i]) list.Add(DayNames[i]);
+                return string.Join(", ", list.ToArray());
+            }
+        }
+
+        /// <summary>Longest wait between two deliveries, in days.</summary>
+        public int MaxGap
+        {
+            get
+            {
+                int best = 1;
+                for (int i = 0; i < 7; i++)
+                {
+                    if (!Days[i]) continue;
+                    int gap = 1;
+                    while (gap < 7 && !Days[(i + gap) % 7]) gap++;
+                    best = Mathf.Max(best, gap);
+                }
+                return best;
+            }
+        }
+    }
+
     public class CategoryDef
     {
         public string Id;
@@ -86,6 +137,7 @@ namespace StoreManager
         public static readonly List<ProductDef> Products = new List<ProductDef>();
         public static readonly List<FixtureDef> Fixtures = new List<FixtureDef>();
         public static readonly List<LicenceDef> Licences = new List<LicenceDef>();
+        public static readonly List<SupplierDef> Suppliers = new List<SupplierDef>();
         public static float TotalDemand;
 
         /// <summary>Total XP needed to reach level i + 1 (index 0 = level 1).</summary>
@@ -169,7 +221,9 @@ namespace StoreManager
             P(grocery, "Cereal", 2.2f, 4.2f, 0, 1.0f, 12);
             P(grocery, "Coffee", 4.5f, 8.5f, 0, 0.8f, 12);
             P(grocery, "Snacks", 1.4f, 2.8f, 0, 1.2f, 24);
-            P(grocery, "Soft Drinks", 0.8f, 1.7f, 0, 1.3f, 24);
+            P(grocery, "Bubbla Cola", 0.8f, 1.7f, 0, 0.75f, 24);
+            P(grocery, "Zing Cola", 0.75f, 1.6f, 0, 0.65f, 24);
+            P(grocery, "Sliced Bread", 1.0f, 2.2f, 5, 0.9f, 10);
 
             var produce = Cat("produce", "Produce", "#6fbf4a", "produce");
             P(produce, "Apples", 0.6f, 1.3f, 10, 1.1f, 40);
@@ -196,7 +250,7 @@ namespace StoreManager
             bakery.Baked = true;
             bakery.NeedsSpecialist = true;
             bakery.SpecialistRole = Role.Baker;
-            P(bakery, "Bread", 0.6f, 2.8f, 2, 1.4f, 12);
+            P(bakery, "Fresh Bread", 0.6f, 2.8f, 2, 1.4f, 12);
             P(bakery, "Croissants", 0.4f, 1.6f, 1, 1.0f, 12);
             P(bakery, "Cakes", 3.0f, 9.0f, 3, 0.5f, 6);
 
@@ -211,10 +265,30 @@ namespace StoreManager
             TotalDemand = 0f;
             for (int i = 0; i < Products.Count; i++) TotalDemand += Products[i].Demand;
 
+            // ---- suppliers (days are Mon..Sun)
+            var warehouse = Sup("warehouse", "Central Warehouse", SupplierKind.Warehouse, "1111111", 10, 0f, 0f, 6000f, 2000f,
+                "Dry goods, produce, frozen and household. Delivers every day. No credit for expired stock.");
+            Sup("bubbla", "Bubbla Beverages", SupplierKind.Direct, "1010100", 14, 1f, 100f, 800f, 400f,
+                "Bubbla Cola. Their own trucks on Mon, Wed and Fri. Takes back expired stock for full credit.");
+            Sup("zing", "Zing Drinks", SupplierKind.Direct, "0101010", 14, 1f, 100f, 800f, 400f,
+                "Zing Cola. Delivers Tue, Thu and Sat. Takes back expired stock for full credit.");
+            Sup("dairy", "Valley Dairy Co-op", SupplierKind.Direct, "1111110", 7, 0.75f, 60f, 1000f, 500f,
+                "Milk, eggs, yogurt and cheese, Mon-Sat. Credits 75% of expired stock sent back.");
+            Sup("bakery", "Millhouse Bakery", SupplierKind.Direct, "1111111", 7, 1f, 40f, 400f, 200f,
+                "Packaged sliced bread, every morning. Takes back old bread for full credit.");
+            Sup("meats", "Fjord Meats", SupplierKind.Direct, "1001000", 7, 0.5f, 150f, 2000f, 1000f,
+                "Deli meats and salads on Mon and Thu. Credits 50% of expired stock sent back.");
+            for (int i = 0; i < Products.Count; i++) if (!Products[i].Category.Baked) Products[i].Supplier = warehouse;
+            Supply("bubbla", "Bubbla Cola");
+            Supply("zing", "Zing Cola");
+            Supply("dairy", "Milk", "Eggs", "Yogurt", "Cheese");
+            Supply("bakery", "Sliced Bread");
+            Supply("meats", "Sliced Ham", "Chicken", "Salads", "Steak");
+
             // ---- licences (level, cost, needs, unlocks)
-            var basics = Lic("basics", "Basic Groceries", 1, 0f, null, true, new[] { "Pasta", "Canned Soup", "Soft Drinks", "Snacks" },
+            var basics = Lic("basics", "Basic Groceries", 1, 0f, null, true, new[] { "Pasta", "Canned Soup", "Bubbla Cola", "Zing Cola", "Snacks" },
                 new[] { "gondola", "checkout" }, new[] { Role.Cashier, Role.Stocker });
-            Lic("pantry", "Pantry Staples", 2, 1200f, basics, false, new[] { "Rice", "Cereal" }, null, null);
+            Lic("pantry", "Pantry Staples", 2, 1200f, basics, false, new[] { "Rice", "Cereal", "Sliced Bread" }, null, null);
             var produceL = Lic("produce", "Produce Department", 2, 2500f, null, true, new[] { "Apples", "Bananas", "Potatoes" },
                 new[] { "produce" }, null);
             Lic("coffee", "Coffee", 3, 1500f, basics, false, new[] { "Coffee" }, null, null);
@@ -225,7 +299,7 @@ namespace StoreManager
                 null, null);
             Lic("frozen", "Frozen Food", 5, 3500f, dairyL, false, new[] { "Frozen Pizza", "Ice Cream" }, null, null);
             Lic("cheese", "Cheese", 5, 1500f, dairyL, false, new[] { "Cheese" }, null, null);
-            var bakeryL = Lic("bakery", "Bakery Department", 6, 8000f, null, true, new[] { "Bread", "Croissants" },
+            var bakeryL = Lic("bakery", "Bakery Department", 6, 8000f, null, true, new[] { "Fresh Bread", "Croissants" },
                 new[] { "oven", "bakery_shelf" }, new[] { Role.Baker });
             Lic("cleaning", "Cleaning & Batteries", 6, 2000f, householdL, false, new[] { "Detergent", "Batteries" }, null, null);
             var deliL = Lic("deli", "Deli Department", 7, 12000f, null, true, new[] { "Sliced Ham", "Chicken" },
@@ -233,6 +307,31 @@ namespace StoreManager
             Lic("cakes", "Cakes", 8, 3000f, bakeryL, false, new[] { "Cakes" }, null, null);
             Lic("deli_salads", "Deli Salads", 9, 3000f, deliL, false, new[] { "Salads" }, null, null);
             Lic("butcher", "Butcher's Cuts", 10, 6000f, deliL, false, new[] { "Steak" }, null, null);
+        }
+
+        static SupplierDef Sup(string id, string name, SupplierKind kind, string days, int terms, float credit, float min,
+            float creditBase, float creditPerLevel, string desc)
+        {
+            var s = new SupplierDef
+            {
+                Id = id, Name = name, Kind = kind, TermsDays = terms, ReturnCredit = credit, MinOrder = min,
+                CreditBase = creditBase, CreditPerLevel = creditPerLevel, Description = desc,
+            };
+            for (int i = 0; i < 7; i++) s.Days[i] = days[i] == '1';
+            Suppliers.Add(s);
+            return s;
+        }
+
+        static void Supply(string supplier, params string[] products)
+        {
+            var s = SupplierById(supplier);
+            for (int i = 0; i < products.Length; i++) ProductByName(products[i]).Supplier = s;
+        }
+
+        public static SupplierDef SupplierById(string id)
+        {
+            for (int i = 0; i < Suppliers.Count; i++) if (Suppliers[i].Id == id) return Suppliers[i];
+            return null;
         }
 
         static LicenceDef Lic(string id, string name, int level, float cost, LicenceDef requires, bool dept,

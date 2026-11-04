@@ -6,7 +6,8 @@ namespace StoreManager
     public class Batch
     {
         public int Qty;
-        public int DaysLeft; // -1 = does not expire
+        public int DaysLeft; // -1 = does not expire, 0 = expired (still here until someone scans it out)
+        public bool Expired { get { return DaysLeft == 0; } }
     }
 
     /// <summary>A pile of one product, kept oldest-first so taking is FIFO.</summary>
@@ -57,23 +58,92 @@ namespace StoreManager
             return taken;
         }
 
-        /// <summary>One night passes. Returns the number of units that expired.</summary>
+        /// <summary>One night passes. Expired stock stays put. Returns the units that expired tonight.</summary>
         public int Age()
         {
             int expired = 0;
-            for (int i = Batches.Count - 1; i >= 0; i--)
+            for (int i = 0; i < Batches.Count; i++)
             {
                 Batch b = Batches[i];
-                if (b.DaysLeft < 0) continue;
+                if (b.DaysLeft <= 0) continue;
                 b.DaysLeft--;
-                if (b.DaysLeft <= 0)
-                {
-                    expired += b.Qty;
-                    Batches.RemoveAt(i);
-                }
+                if (b.DaysLeft == 0) expired += b.Qty;
             }
-            Total -= expired;
+            // two batches that are now the same age become one
+            for (int i = Batches.Count - 1; i > 0; i--)
+            {
+                if (Batches[i].DaysLeft != Batches[i - 1].DaysLeft) continue;
+                Batches[i - 1].Qty += Batches[i].Qty;
+                Batches.RemoveAt(i);
+            }
             return expired;
+        }
+
+        public int ExpiredTotal
+        {
+            get { int t = 0; for (int i = 0; i < Batches.Count; i++) if (Batches[i].Expired) t += Batches[i].Qty; return t; }
+        }
+
+        public int FreshTotal { get { return Total - ExpiredTotal; } }
+
+        /// <summary>Units that expire within this many nights (not counting ones already expired).</summary>
+        public int ExpiringWithin(int days)
+        {
+            int t = 0;
+            for (int i = 0; i < Batches.Count; i++)
+                if (Batches[i].DaysLeft > 0 && Batches[i].DaysLeft <= days) t += Batches[i].Qty;
+            return t;
+        }
+
+        /// <summary>Pulls every expired unit out. Returns how many.</summary>
+        public int RemoveExpired()
+        {
+            int n = 0;
+            for (int i = Batches.Count - 1; i >= 0; i--)
+            {
+                if (!Batches[i].Expired) continue;
+                n += Batches[i].Qty;
+                Batches.RemoveAt(i);
+            }
+            Total -= n;
+            return n;
+        }
+
+        /// <summary>Takes up to qty in-date units, newest first (customers digging at the back of the shelf).</summary>
+        public int TakeNewest(int qty)
+        {
+            int taken = 0;
+            for (int i = Batches.Count - 1; i >= 0 && qty > 0; i--)
+            {
+                Batch b = Batches[i];
+                if (b.Expired) continue;
+                int n = Mathf.Min(qty, b.Qty);
+                b.Qty -= n;
+                qty -= n;
+                taken += n;
+                Total -= n;
+                if (b.Qty <= 0) Batches.RemoveAt(i);
+            }
+            return taken;
+        }
+
+        /// <summary>Takes up to qty in-date units, oldest first. Returns how many were taken.</summary>
+        public int TakeFresh(int qty)
+        {
+            int taken = 0;
+            for (int i = 0; i < Batches.Count && qty > 0; )
+            {
+                Batch b = Batches[i];
+                if (b.Expired) { i++; continue; }
+                int n = Mathf.Min(qty, b.Qty);
+                b.Qty -= n;
+                qty -= n;
+                taken += n;
+                Total -= n;
+                if (b.Qty <= 0) Batches.RemoveAt(i);
+                else i++;
+            }
+            return taken;
         }
 
         public void Clear()
@@ -110,7 +180,7 @@ namespace StoreManager
         public int Incoming { get { return OnOrder + OnExpress; } }
         public int Par;
 
-        public int SoldToday, MissedToday, PriceSkipsToday, WastedLastNight;
+        public int SoldToday, MissedToday, PriceSkipsToday, ExpiredFoundToday, BinnedToday, ExpiredLastNight;
 
         public Product(ProductDef def, Category category)
         {
@@ -137,11 +207,47 @@ namespace StoreManager
         public float ShelfFill { get { int c = ShelfCap; return c > 0 ? Mathf.Clamp01(ShelfTotal / (float)c) : 0f; } }
         public int OnHand { get { return ShelfTotal + Back.Total; } }
 
+        public int ShelfExpired
+        {
+            get { int t = 0; for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Stock.ExpiredTotal; return t; }
+        }
+
+        public int ExpiredOnHand { get { return ShelfExpired + Back.ExpiredTotal; } }
+        public int FreshOnHand { get { return OnHand - ExpiredOnHand; } }
+
+        public int ExpiringSoon(int days)
+        {
+            int t = Back.ExpiringWithin(days);
+            for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Stock.ExpiringWithin(days);
+            return t;
+        }
+
+        /// <summary>Units sold on each of the last 7 days (newest last).</summary>
+        public readonly List<int> SoldHistory = new List<int>();
+
+        public float AvgSold
+        {
+            get
+            {
+                if (SoldHistory.Count == 0) return SoldToday;
+                int t = 0;
+                for (int i = 0; i < SoldHistory.Count; i++) t += SoldHistory[i];
+                return t / (float)SoldHistory.Count;
+            }
+        }
+
         public void ResetDaily()
         {
+            if (Carried || SoldToday > 0)
+            {
+                SoldHistory.Add(SoldToday);
+                if (SoldHistory.Count > 7) SoldHistory.RemoveAt(0);
+            }
             SoldToday = 0;
             MissedToday = 0;
             PriceSkipsToday = 0;
+            ExpiredFoundToday = 0;
+            BinnedToday = 0;
         }
     }
 }

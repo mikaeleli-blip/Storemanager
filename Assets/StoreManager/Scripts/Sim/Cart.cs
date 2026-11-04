@@ -61,6 +61,33 @@ namespace StoreManager
             return t;
         }
 
+        public float SupplierCost(SupplierDef s, bool express)
+        {
+            float t = 0f;
+            for (int i = 0; i < Lines.Count; i++)
+                if (Lines[i].Product.Def.Supplier == s) t += Lines[i].Cases * Store.CaseCost(Lines[i].Product, express);
+            return t;
+        }
+
+        /// <summary>Scales one supplier's lines down (whole cases) to fit a budget.</summary>
+        public void TrimSupplier(SupplierDef s, float maxCost, bool express)
+        {
+            float cost = SupplierCost(s, express);
+            if (cost <= maxCost || cost <= 0f) return;
+            float ratio = Mathf.Clamp01(maxCost / cost) * 0.98f;
+            for (int i = Lines.Count - 1; i >= 0; i--)
+            {
+                if (Lines[i].Product.Def.Supplier != s) continue;
+                Lines[i].Cases = Mathf.FloorToInt(Lines[i].Cases * ratio);
+                if (Lines[i].Cases <= 0) Lines.RemoveAt(i);
+            }
+        }
+
+        public void RemoveSupplier(SupplierDef s)
+        {
+            for (int i = Lines.Count - 1; i >= 0; i--) if (Lines[i].Product.Def.Supplier == s) Lines.RemoveAt(i);
+        }
+
         /// <summary>Scales every line down (whole cases) until the order fits the space and the money.</summary>
         public void Trim(int maxUnits, float maxCost, bool express)
         {

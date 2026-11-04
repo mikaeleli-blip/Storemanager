@@ -12,6 +12,7 @@ public static class Runner
     static Store store;
     static readonly Dictionary<Customer, float> born = new Dictionary<Customer, float>();
     static int maxCustomers, stuckReports;
+    static bool overstock;
 
     public static int Main(string[] args)
     {
@@ -22,6 +23,8 @@ public static class Runner
         typeof(Bootstrap).GetMethod("Boot", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
         store = Store.I;
         Engine.Tick(1f / 30f);   // Start(): sits at the desk, opens build mode
+        overstock = args.Length > 3 && args[3] == "overstock";
+        if (overstock) { store.DateChecks = DateCheckPolicy.WhenRestocking; Console.WriteLine("   >> TEST: over-ordering x3, date checks only when restocking"); }
         if (scripted) BuildStarterStore();
         store.Clock.SetSpeed(3); // 4x
 
@@ -49,6 +52,9 @@ public static class Runner
             PrintLog();
         }
         Console.WriteLine();
+        if (overstock) foreach (var p in store.Products.Where(p => p.Carried && p.Life > 0))
+            Console.WriteLine("   batches " + p.Name + " par " + p.Par + " back[" + string.Join(" ", p.Back.Batches.Select(b => b.Qty + "@" + b.DaysLeft))
+                + "] shelves[" + string.Join(" ", p.Fixtures.SelectMany(f => f.Stock.Batches).Select(b => b.Qty + "@" + b.DaysLeft)) + "] sold " + p.SoldToday);
         Console.WriteLine("Frames " + Engine.Frame + ", exceptions " + Engine.Errors + ", max customers at once " + maxCustomers);
         return Engine.Errors > 0 ? 1 : 0;
     }
@@ -94,10 +100,11 @@ public static class Runner
         float cash0 = store.Economy.Cash;
         PlaceAnywhere("checkout");
         PlaceAnywhere("checkout");
-        foreach (var name in new[] { "Soft Drinks", "Snacks", "Pasta", "Canned Soup", "Soft Drinks", "Snacks" })
+        foreach (var name in new[] { "Bubbla Cola", "Snacks", "Pasta", "Canned Soup", "Zing Cola", "Snacks" })
             PlaceAnywhere("gondola", name);
         int n = FillCart();
-        store.Checkout(store.Cart, true);
+        store.FitToSuppliers(store.Cart, true);
+        store.PlaceOrder(store.Cart, true);
         Note("PLAYER: built " + store.Fixtures.Count + " fixtures for " + Economy.Money(cash0 - store.Economy.Cash)
             + ", ordered " + n + " products by express. Cash " + Economy.Money(store.Economy.Cash));
     }
@@ -106,14 +113,26 @@ public static class Runner
     static int FillCart()
     {
         var s = store;
+        // Pay the oldest bills of any supplier whose credit is running low, as long as cash allows.
+        foreach (var sup in s.Suppliers)
+        {
+            var bills = s.Invoices.Where(i => !i.Paid && i.Supplier == sup).OrderBy(i => i.IssuedDay).ToList();
+            foreach (var inv in bills)
+            {
+                if (s.CreditLeft(sup) >= s.CreditLimit(sup) * 0.5f || s.Economy.Cash - inv.Amount < 1500f) break;
+                s.PayInvoice(inv);
+            }
+        }
         s.Cart.Clear();
         foreach (var p in s.Products)
         {
             if (!p.Carried || p.Baked) continue;
-            int need = p.Par - (p.OnHand + p.Incoming);
+            var sup = s.SupplierOf(p);
+            if (sup == null || sup.OnHold) continue;
+            int need = p.Par * (overstock ? 3 : 1) - (p.FreshOnHand + p.Incoming);
             if (need > 0) s.Cart.Add(p, Mathf.CeilToInt(need / (float)p.Def.CaseSize));
         }
-        s.Cart.Trim(s.BackFreeForOrders, Mathf.Max(0f, s.Economy.Cash - 300f), false);
+        s.FitToSuppliers(s.Cart, false);
         return s.Cart.Lines.Count;
     }
 
@@ -144,11 +163,17 @@ public static class Runner
                 else if (p.Back.Total > p.Par / 2) p.Par = Mathf.Max(sug, p.Par - Mathf.Max(cs, (p.Par / 5) / cs * cs));
             }
             int n = FillCart();
-            string why = s.CheckoutProblem(s.Cart, false);
-            if (n > 0 && !s.Checkout(s.Cart, false)) Note("PLAYER: couldn't pay for the order: " + why);
+            string why = s.OrderProblem(s.Cart, false);
+            if (n > 0 && !s.PlaceOrder(s.Cart, false)) Note("PLAYER: couldn't order: " + why);
             s.Cart.Clear();
         }
         if (hour != 9 && hour != 15) return;
+        if (hour == 9)
+        {
+            float before = s.Economy.Cash;
+            int paid = s.PayBillsDueWithin(2, 500f);
+            if (paid > 0 && day % 5 == 0) Note("PLAYER: paid " + paid + " bills (" + Economy.Money(before - s.Economy.Cash) + ")");
+        }
 
         // 1. licences: cheapest unlocked first, keep a reserve for fixtures
         foreach (var l in Catalog.Licences.OrderBy(l => l.Level).ThenBy(l => l.Cost))
@@ -261,6 +286,9 @@ public static class Runner
             d.Day, d.Customers, d.ItemsSold, Economy.Money(d.Sales), Economy.Money(d.Wholesale), Economy.Money(d.Wages),
             Economy.Money(d.Rent), Economy.Money(d.Construction), Economy.Money(d.Profit), d.AvgSatisfaction, store.Reputation,
             d.Walkouts, d.ComplaintsResolved, d.Complaints, Economy.Money(d.WasteValue), Economy.Money(store.Economy.Cash)));
+        Console.WriteLine("      expiry: binned " + d.WrittenOff + " (" + Economy.Money(d.WasteValue) + ", credit " + Economy.Money(d.ReturnCredit)
+            + ")  customers found expired " + d.ExpiredFound + "  still on shelves " + store.ExpiredOnShelvesTotal
+            + " | bills unpaid " + Economy.Money(store.UnpaidTotal) + " overdue " + store.OverdueCount + " late fees " + Economy.Money(d.LateFees));
         if (d.SatisfactionLost.Count > 0)
             Console.WriteLine("      upset by: " + string.Join(", ", d.SatisfactionLost.OrderByDescending(kv => kv.Value)
                 .Select(kv => kv.Key + " " + (kv.Value / Math.Max(1f, d.Customers)).ToString("0.0") + "/cust")));
