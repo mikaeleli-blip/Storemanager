@@ -146,6 +146,9 @@ namespace StoreManager.EditorTools
         const string Models = "Assets/StoreManager/Resources/Models/";
         const string Textures = "Assets/StoreManager/Resources/Textures/";
 
+        // Bump when the settings below change, so Unity re-imports the models with them.
+        public override uint GetVersion() { return 2; }
+
         void OnPreprocessModel()
         {
             if (!assetPath.StartsWith(Models)) return;
