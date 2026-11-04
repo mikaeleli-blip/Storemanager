@@ -96,10 +96,25 @@ public static class Runner
         PlaceAnywhere("checkout");
         foreach (var name in new[] { "Soft Drinks", "Snacks", "Pasta", "Canned Soup", "Soft Drinks", "Snacks" })
             PlaceAnywhere("gondola", name);
-        int n = store.OrderAllToPar(0f);
-        store.OrderExpress();
+        int n = FillCart();
+        store.Checkout(store.Cart, true);
         Note("PLAYER: built " + store.Fixtures.Count + " fixtures for " + Economy.Money(cash0 - store.Economy.Cash)
             + ", ordered " + n + " products by express. Cash " + Economy.Money(store.Economy.Cash));
+    }
+
+    /// <summary>The player's own shopping: cases up to the par they keep in their head, trimmed to space and cash.</summary>
+    static int FillCart()
+    {
+        var s = store;
+        s.Cart.Clear();
+        foreach (var p in s.Products)
+        {
+            if (!p.Carried || p.Baked) continue;
+            int need = p.Par - (p.OnHand + p.Incoming);
+            if (need > 0) s.Cart.Add(p, Mathf.CeilToInt(need / (float)p.Def.CaseSize));
+        }
+        s.Cart.Trim(s.BackFreeForOrders, Mathf.Max(0f, s.Economy.Cash - 300f), false);
+        return s.Cart.Lines.Count;
     }
 
     static int Count(Role r, Shift sh) { return store.Staff.All.Count(e => e != null && !e.Leaving && e.Role == r && e.Shift == sh); }
@@ -128,8 +143,10 @@ public static class Runner
                 if (p.MissedToday > 0 && p.Back.Total == 0) p.Par = Mathf.Min(p.Par + Mathf.Max(cs, (p.Par / 5) / cs * cs), sug * 3);
                 else if (p.Back.Total > p.Par / 2) p.Par = Mathf.Max(sug, p.Par - Mathf.Max(cs, (p.Par / 5) / cs * cs));
             }
-            int n = s.OrderAllToPar(0f);
-            if (n > 0 && day % 5 == 0) Note("PLAYER: ordered " + n + " products to par");
+            int n = FillCart();
+            string why = s.CheckoutProblem(s.Cart, false);
+            if (n > 0 && !s.Checkout(s.Cart, false)) Note("PLAYER: couldn't pay for the order: " + why);
+            s.Cart.Clear();
         }
         if (hour != 9 && hour != 15) return;
 
@@ -270,12 +287,22 @@ public static class Runner
             store.Avatar.StandUp();
             onGui.Invoke(hud, null);
             store.Avatar.SitDown();
-            for (int t = 0; t < 9; t++) { hud.ShowTab(t); onGui.Invoke(hud, null); }
+            store.Cam.LockBlend = 1f;
+            for (int t = 0; t < Hud.AppCount; t++) hud.OpenApp((Hud.App)t);
+            onGui.Invoke(hud, null);
+            typeof(Hud).GetField("statsPage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(hud, 1);
+            var some = store.Products.FirstOrDefault(p => p.Carried && !p.Baked);
+            if (some != null) store.Cart.Add(some, 2);
+            onGui.Invoke(hud, null);
+            store.Cart.Clear();
+            typeof(Hud).GetField("statsPage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(hud, 0);
+            hud.OpenBuildView();
+            onGui.Invoke(hud, null);
             BuildMode.I.StartPlacing(Catalog.FixtureById("checkout"));
             onGui.Invoke(hud, null);
             BuildMode.I.CancelTool();
             foreach (var f in store.Fixtures.Take(12)) { BuildMode.I.Selected = f; onGui.Invoke(hud, null); }
-            hud.ShowTab(1);
+            hud.OpenPC();
             hud.Selected = null;
             hud.SelectedCustomer = null;
             BuildMode.I.Selected = null;

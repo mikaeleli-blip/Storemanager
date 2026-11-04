@@ -43,6 +43,7 @@ namespace StoreManager
 
         float spawnAcc, visualsTimer, truckTimer, expressTimer = -1f;
         public bool ExpressPending { get { return expressTimer >= 0f; } }
+        public float ExpressMinutesLeft { get { return Mathf.Max(0f, expressTimer); } }
 
         public const float BaseTraffic = 0.28f;
         public const float ParDays = 2f;
@@ -71,6 +72,8 @@ namespace StoreManager
         }
         public Vector2Int StaffEntrance { get { return new Vector2Int(Grid.W - 4, Layout.DockRow); } }
         public Vector2Int DeskSeat { get { return new Vector2Int(3, 30); } }
+        /// <summary>Where the camera sits to look at the office computer screen (desk at 3.5, 31.5, monitor facing -Z).</summary>
+        public Vector3 MonitorView { get { return new Vector3(3.5f, 1.18f, 30.72f); } }
 
         /// <summary>Share of everything customers ask for that the store carries (by demand).</summary>
         public float Variety
@@ -139,14 +142,13 @@ namespace StoreManager
             Economy.Today.Day = Clock.Day;
             Economy.PayRent(Rent);
             Message("Your corner shop is empty. You have a Basic Groceries licence: pasta, canned soup, soft drinks and snacks.");
-            Message("Place a checkout and some shelves, pick what goes on each shelf, then order stock (express gets it here today).");
+            Message("Open the Build app on your computer to place a checkout and shelves, pick what goes on each shelf, then buy stock in the Shop app (express gets it here today).");
             Message("Time is paused. Press 1-4 or the speed buttons when you're ready to open. Sales earn XP; levels unlock licences.");
         }
 
         void Start()
         {
             Avatar.SitDown();
-            BuildMode.I.Open();
         }
 
         void SpawnAvatar()
@@ -216,12 +218,6 @@ namespace StoreManager
             float daily = ExpectedCustomersPerDay * 6.5f * 1.3f * share;
             int cs = p.Def.CaseSize;
             return Mathf.Max(cs * 2, Mathf.CeilToInt(daily * ParDays / cs) * cs);
-        }
-
-        public void SuggestAllPars()
-        {
-            for (int i = 0; i < Products.Count; i++)
-                if (Products[i].Carried && !Products[i].Baked) Products[i].Par = SuggestedPar(Products[i]);
         }
 
         public Product ProductOf(ProductDef def)
@@ -320,8 +316,9 @@ namespace StoreManager
                 if (h == orderHour)
                 {
                     float err = Mathf.Clamp((10f - am.Leadership) * 0.04f, 0f, 0.4f);
-                    int lines = OrderAllToPar(err);
-                    Message(am.DisplayName + " placed the stock order (" + lines + " products). Arrives 06:00.");
+                    int lines = AutoOrder(err);
+                    Message(lines > 0 ? am.DisplayName + " ordered " + lines + " products for the 06:00 truck."
+                        : am.DisplayName + " didn't order: everything is stocked, or there's no room or cash.");
                 }
             }
 
@@ -651,73 +648,107 @@ namespace StoreManager
             get { int t = 0; for (int i = 0; i < Products.Count; i++) t += Products[i].Back.Total; return t; }
         }
 
+        /// <summary>Paid for and on its way (truck or express).</summary>
         public int OnOrderTotal
         {
-            get { int t = 0; for (int i = 0; i < Products.Count; i++) t += Products[i].OnOrder; return t; }
+            get { int t = 0; for (int i = 0; i < Products.Count; i++) t += Products[i].OnOrder + Products[i].OnExpress; return t; }
         }
 
-        public float OnOrderCost
+        /// <summary>Back-room space not yet spoken for by stock or deliveries on the way.</summary>
+        public int BackFreeForOrders { get { return Mathf.Max(0, BackCapacity - BackStockTotal - OnOrderTotal); } }
+
+        /// <summary>The cart on the office computer.</summary>
+        public readonly Cart Cart = new Cart();
+
+        public static float CaseCost(Product p, bool express)
         {
-            get { float t = 0f; for (int i = 0; i < Products.Count; i++) t += Products[i].OnOrder * Products[i].Def.Cost; return t; }
+            return p.Def.Cost * p.Def.CaseSize * (express ? 1f + ExpressSurcharge : 1f);
         }
 
-        public void Order(Product p, int qty)
+        public string CheckoutProblem(Cart c, bool express)
         {
-            if (qty > 0 && !p.Baked) p.OnOrder += qty;
+            if (c.Lines.Count == 0) return "The cart is empty.";
+            if (c.Units > BackFreeForOrders)
+                return "Not enough room in the back room: " + BackFreeForOrders + " units free (stock on the way counts), the cart has " + c.Units + ".";
+            float cost = c.Cost(express);
+            if (Economy.Cash < cost) return "Not enough cash: this order costs " + Economy.Money(cost) + ".";
+            return null;
         }
 
-        public int OrderToPar(Product p, float error)
+        /// <summary>Pays for the cart now. Truck orders arrive at 06:00, express in about an hour.</summary>
+        public bool Checkout(Cart c, bool express)
         {
-            if (p.Baked || !p.Carried) return 0;
-            int need = p.Par - (p.OnHand + p.OnOrder);
-            if (need <= 0) return 0;
-            float q = need;
-            if (error > 0f) q *= Random.Range(1f - error, 1f + error);
-            int cases = Mathf.Max(1, Mathf.CeilToInt(q / p.Def.CaseSize));
-            p.OnOrder += cases * p.Def.CaseSize;
-            return 1;
-        }
-
-        public int OrderAllToPar(float error)
-        {
-            int lines = 0;
-            for (int i = 0; i < Products.Count; i++) lines += OrderToPar(Products[i], error);
-            return lines;
-        }
-
-        /// <summary>Send everything on order now: arrives in an hour, costs 25% more.</summary>
-        public bool OrderExpress()
-        {
-            if (OnOrderTotal == 0 || ExpressPending) return false;
-            expressTimer = 60f;
-            Message("Express delivery booked: arrives in about an hour (+25%).");
+            if (CheckoutProblem(c, express) != null) return false;
+            float cost = c.Cost(express);
+            int units = c.Units, lines = c.Lines.Count;
+            Economy.PayWholesale(cost);
+            for (int i = 0; i < c.Lines.Count; i++)
+            {
+                var l = c.Lines[i];
+                if (express) l.Product.OnExpress += l.Units;
+                else l.Product.OnOrder += l.Units;
+            }
+            c.Clear();
+            if (express)
+            {
+                if (expressTimer < 0f) expressTimer = 60f;
+                Message("Express order paid: " + units + " units for " + Economy.Money(cost) + ". Arrives in about an hour.");
+            }
+            else Message("Order paid: " + lines + " products, " + units + " units for " + Economy.Money(cost) + ". Arrives with the 06:00 truck.");
             return true;
+        }
+
+        /// <summary>
+        /// The assistant manager's order: everything on sale up to about two days of sales, by tomorrow's truck,
+        /// within the back-room space and the cash available. Returns the number of products ordered.
+        /// </summary>
+        public int AutoOrder(float error)
+        {
+            var c = new Cart();
+            for (int i = 0; i < Products.Count; i++)
+            {
+                var p = Products[i];
+                if (!p.Carried || p.Baked) continue;
+                int need = SuggestedPar(p) - (p.OnHand + p.OnOrder + p.OnExpress);
+                if (need <= 0) continue;
+                float q = need;
+                if (error > 0f) q *= Random.Range(1f - error, 1f + error);
+                c.Add(p, Mathf.Max(1, Mathf.CeilToInt(q / p.Def.CaseSize)));
+            }
+            c.Trim(BackFreeForOrders, Mathf.Max(0f, Economy.Cash - 500f), false);
+            int lines = c.Lines.Count;
+            return Checkout(c, false) ? lines : 0;
         }
 
         void Deliver(bool express)
         {
             if (express) expressTimer = -1f;
             int space = Mathf.Max(0, BackCapacity - BackStockTotal);
-            float cost = 0f;
+            float refund = 0f;
             int units = 0, refused = 0, ordered = 0;
-            for (int i = 0; i < Products.Count; i++) ordered += Mathf.Max(0, Products[i].OnOrder);
+            var due = new int[Products.Count];
+            for (int i = 0; i < Products.Count; i++)
+            {
+                due[i] = express ? Products[i].OnExpress : Products[i].OnOrder;
+                ordered += due[i];
+            }
 
-            // Not enough room: everything gets a fair share (whole cases), then spare room goes to what's lowest.
+            // Space was checked at checkout, but shelves cleared since then can fill the back room.
+            // Then everything gets a fair share (whole cases), spare room goes to what's lowest, the rest is refunded.
             var take = new int[Products.Count];
             float ratio = ordered > space ? (float)space / ordered : 1f;
             int left = space;
             for (int i = 0; i < Products.Count; i++)
             {
-                var p = Products[i];
-                if (p.OnOrder <= 0) continue;
-                int cs = p.Def.CaseSize;
-                take[i] = ratio >= 1f ? p.OnOrder : Mathf.FloorToInt(p.OnOrder * ratio / cs) * cs;
+                if (due[i] <= 0) continue;
+                int cs = Products[i].Def.CaseSize;
+                take[i] = ratio >= 1f ? due[i] : Mathf.FloorToInt(due[i] * ratio / cs) * cs;
                 left -= take[i];
             }
             if (ratio < 1f)
             {
                 var order = new List<int>();
-                for (int i = 0; i < Products.Count; i++) if (Products[i].OnOrder > take[i]) order.Add(i);
+                for (int i = 0; i < Products.Count; i++) if (due[i] > take[i]) order.Add(i);
                 order.Sort((a, b) => ((float)Products[a].OnHand / Mathf.Max(1, Products[a].Par)).CompareTo((float)Products[b].OnHand / Mathf.Max(1, Products[b].Par)));
                 bool gave = true;
                 while (gave && left > 0)
@@ -726,7 +757,7 @@ namespace StoreManager
                     for (int k = 0; k < order.Count; k++)
                     {
                         int i = order[k], cs = Products[i].Def.CaseSize;
-                        if (take[i] + cs > Products[i].OnOrder || cs > left) continue;
+                        if (take[i] + cs > due[i] || cs > left) continue;
                         take[i] += cs;
                         left -= cs;
                         gave = true;
@@ -736,20 +767,18 @@ namespace StoreManager
             for (int i = 0; i < Products.Count; i++)
             {
                 var p = Products[i];
-                if (p.OnOrder <= 0) continue;
-                int q = take[i];
-                p.Back.Add(q, p.Life);
-                units += q;
-                cost += q * p.Def.Cost;
-                refused += p.OnOrder - q;
-                p.OnOrder = 0;
+                if (due[i] <= 0) continue;
+                p.Back.Add(take[i], p.Life);
+                units += take[i];
+                refused += due[i] - take[i];
+                refund += (due[i] - take[i]) * p.Def.Cost * (express ? 1f + ExpressSurcharge : 1f);
+                if (express) p.OnExpress = 0; else p.OnOrder = 0;
             }
-            if (express) cost *= 1f + ExpressSurcharge;
+            if (refund > 0f) Economy.PayWholesale(-refund);
             if (units > 0)
             {
-                Economy.PayWholesale(cost);
-                Message((express ? "Express delivery" : "Delivery") + " arrived: " + units + " units for " + Economy.Money(cost) + "."
-                    + (refused > 0 ? " " + refused + " units refused: the back room is full." : ""));
+                Message((express ? "Express delivery" : "Delivery") + " arrived: " + units + " units."
+                    + (refused > 0 ? " " + refused + " units didn't fit in the back room and were refunded (" + Economy.Money(refund) + ")." : ""));
                 if (Builder.Truck != null) Builder.Truck.SetActive(true);
                 truckTimer = 60f;
             }

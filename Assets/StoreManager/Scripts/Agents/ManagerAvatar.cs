@@ -95,23 +95,13 @@ namespace StoreManager
             AtDesk = true;
             Teleport(Store.I.DeskSeat);
             Face(Vector3.forward);
-            var cam = Store.I.Cam;
-            if (cam != null)
-            {
-                cam.FreeMode = true;
-                cam.Distance = Mathf.Max(cam.Distance, 60f);
-            }
+            if (Hud.I != null) Hud.I.OpenPC();
         }
 
         public void StandUp()
         {
             AtDesk = false;
-            var cam = Store.I.Cam;
-            if (cam != null)
-            {
-                cam.FreeMode = false;
-                cam.Distance = Mathf.Min(cam.Distance, 34f);
-            }
+            if (Hud.I != null) Hud.I.LeaveDesk();
         }
 
         public void WalkTo(Vector2Int tile)

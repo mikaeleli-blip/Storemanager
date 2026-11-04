@@ -105,7 +105,9 @@ namespace StoreManager
         public readonly Category Category;
         public readonly StockPile Back = new StockPile();
         public readonly List<Fixture> Fixtures = new List<Fixture>();
-        public int OnOrder;
+        public int OnOrder;      // paid for, coming with the 06:00 truck
+        public int OnExpress;    // paid for, coming by express
+        public int Incoming { get { return OnOrder + OnExpress; } }
         public int Par;
 
         public int SoldToday, MissedToday, PriceSkipsToday, WastedLastNight;

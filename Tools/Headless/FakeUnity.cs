@@ -44,6 +44,7 @@ namespace UnityEngine
         public static float Lerp(float a, float b, float t) { return a + (b - a) * Clamp01(t); }
         public static float Exp(float v) { return (float)Math.Exp(v); }
         public static float InverseLerp(float a, float b, float v) { return a == b ? 0f : Clamp01((v - a) / (b - a)); }
+        public static float MoveTowards(float a, float b, float d) { return Math.Abs(b - a) <= d ? b : a + Math.Sign(b - a) * d; }
         public static float SmoothStep(float a, float b, float t) { t = Clamp01(t); t = -2f * t * t * t + 3f * t * t; return b * t + a * (1f - t); }
         public static float Sqrt(float v) { return (float)Math.Sqrt(v); }
         public static float Sin(float v) { return (float)Math.Sin(v); }
@@ -123,6 +124,15 @@ namespace UnityEngine
         public float x, y, z, w;
         public Quaternion(float x, float y, float z, float w) { this.x = x; this.y = y; this.z = z; this.w = w; }
         public static Quaternion identity { get { return new Quaternion(0, 0, 0, 1); } }
+        public static Quaternion Slerp(Quaternion a, Quaternion b, float t)
+        {
+            t = Mathf.Clamp01(t);
+            float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+            if (d < 0f) { b = new Quaternion(-b.x, -b.y, -b.z, -b.w); }
+            var q = new Quaternion(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
+            float n = Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+            return n > 0f ? new Quaternion(q.x / n, q.y / n, q.z / n, q.w / n) : identity;
+        }
         public static Quaternion Euler(float ex, float ey, float ez)
         {
             float d = Mathf.PI / 180f;
@@ -192,6 +202,10 @@ namespace UnityEngine
             c = new Color(((v >> 16) & 255) / 255f, ((v >> 8) & 255) / 255f, (v & 255) / 255f);
             return true;
         }
+        public static string ToHtmlStringRGB(Color c)
+        {
+            return ((int)(Mathf.Clamp01(c.r) * 255)).ToString("X2") + ((int)(Mathf.Clamp01(c.g) * 255)).ToString("X2") + ((int)(Mathf.Clamp01(c.b) * 255)).ToString("X2");
+        }
     }
 
     public struct Rect
@@ -199,6 +213,8 @@ namespace UnityEngine
         public float x, y, width, height;
         public Rect(float x, float y, float w, float h) { this.x = x; this.y = y; width = w; height = h; }
         public bool Contains(Vector2 p) { return p.x >= x && p.y >= y && p.x < x + width && p.y < y + height; }
+        public float xMax { get { return x + width; } }
+        public float yMax { get { return y + height; } }
     }
 
     public struct Matrix4x4
@@ -420,7 +436,17 @@ namespace UnityEngine
     public class Mesh : Object { public Bounds bounds; public int subMeshCount = 1; }
     public enum FilterMode { Point, Bilinear, Trilinear }
     public class Texture : Object { public FilterMode filterMode; }
-    public class Texture2D : Texture { }
+    public enum TextureWrapMode { Repeat, Clamp }
+    public class Texture2D : Texture
+    {
+        public TextureWrapMode wrapMode;
+        public Texture2D() { }
+        public Texture2D(int w, int h) { }
+        public void SetPixel(int x, int y, Color c) { }
+        public void Apply() { }
+        static Texture2D white;
+        public static Texture2D whiteTexture { get { return white ?? (white = new Texture2D(1, 1)); } }
+    }
     public enum MaterialGlobalIlluminationFlags { None, RealtimeEmissive, BakedEmissive, AnyEmissive, EmissiveIsBlack }
     public static class Resources
     {
@@ -525,21 +551,24 @@ namespace UnityEngine
     // ------------------------------------------------------------------ GUI (no-ops)
 
     public class GUIContent { public static GUIContent none = new GUIContent(); }
-    public class GUIStyleState { public Color textColor; }
+    public class GUIStyleState { public Color textColor; public Texture2D background; }
+    public class RectOffset { public RectOffset() { } public RectOffset(int l, int r, int t, int b) { } }
     public class GUIStyle
     {
         public int fontSize;
         public bool wordWrap, richText;
         public FontStyle fontStyle;
         public TextAnchor alignment;
-        public GUIStyleState normal = new GUIStyleState();
+        public GUIStyleState normal = new GUIStyleState(), onNormal = new GUIStyleState();
+        public RectOffset padding = new RectOffset();
+        public static GUIStyle none = new GUIStyle();
         public GUIStyle() { }
         public GUIStyle(GUIStyle other) { }
         public static implicit operator GUIStyle(string s) { return new GUIStyle(); }
     }
-    public class GUISkin { public GUIStyle label = new GUIStyle(); }
+    public class GUISkin { public GUIStyle label = new GUIStyle(), button = new GUIStyle(), box = new GUIStyle(); }
     public class GUILayoutOption { }
-    public class Event { public static Event current = new Event(); public EventType type = EventType.Layout; }
+    public class Event { public static Event current = new Event(); public EventType type = EventType.Layout; public Vector2 mousePosition; }
     public static class GUIUtility { public static int hotControl; }
 
     public static class GUI
@@ -550,6 +579,14 @@ namespace UnityEngine
         public static void Box(Rect r, GUIContent c) { }
         public static void Label(Rect r, string t, GUIStyle s) { }
         public static bool Button(Rect r, string t) { return false; }
+        public static bool Button(Rect r, GUIContent c, GUIStyle s) { return false; }
+        public static Color color = new Color(1, 1, 1), backgroundColor = new Color(1, 1, 1);
+        public static void DrawTexture(Rect r, Texture t) { }
+        public delegate void WindowFunction(int id);
+        public static Rect Window(int id, Rect r, WindowFunction f, GUIContent c, GUIStyle s) { f(id); return r; }
+        public static Rect Window(int id, Rect r, WindowFunction f, string t) { f(id); return r; }
+        public static void DragWindow(Rect r) { }
+        public static void FocusWindow(int id) { }
     }
 
     public static class GUILayout
@@ -562,6 +599,7 @@ namespace UnityEngine
         public static void BeginHorizontal(GUIStyle s, params GUILayoutOption[] o) { }
         public static void EndHorizontal() { }
         public static void BeginVertical(GUIStyle s, params GUILayoutOption[] o) { }
+        public static void BeginVertical(params GUILayoutOption[] o) { }
         public static void EndVertical() { }
         public static void Label(string t, params GUILayoutOption[] o) { }
         public static void Label(string t, GUIStyle s, params GUILayoutOption[] o) { }

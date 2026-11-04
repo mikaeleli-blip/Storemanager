@@ -28,6 +28,7 @@ namespace StoreManager
         float confirmTime;
 
         public bool Busy { get { return Placing != null || Moving != null; } }
+        public int EscFrame = -1;
 
         void Awake() { I = this; }
 
@@ -103,7 +104,8 @@ namespace StoreManager
             if (!store.Avatar.AtDesk) { Close(); return; }
 
             if (GameInput.Down(GameKey.R)) Rot = (Rot + 1) % 4;
-            if (GameInput.Down(GameKey.Escape) || (GameInput.MouseDown(1) && !Hud.PointerOverUI))
+            if (GameInput.Down(GameKey.Escape) && Busy) { CancelTool(); EscFrame = Time.frameCount; }
+            if (GameInput.MouseDown(1) && !Hud.PointerOverUI)
             {
                 if (Busy) CancelTool();
                 else Selected = null;
@@ -208,7 +210,7 @@ namespace StoreManager
             }
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Rotate (R)")) Rot = (Rot + 1) % 4;
-            if (GUILayout.Button("Done")) { Close(); hud.ShowTab(0); }
+            if (GUILayout.Button("Back to computer (Esc)")) hud.OpenPC();
             GUILayout.EndHorizontal();
             GUILayout.EndArea();
         }
@@ -241,7 +243,7 @@ namespace StoreManager
                     var p = f.Product;
                     GUILayout.Label("<b>" + p.Name + "</b>   on the shelf " + f.Stock.Total + " / " + f.Def.Capacity, hud.Rich);
                     if (p.Baked) GUILayout.Label("Baked by bakers at an oven.", hud.Small);
-                    else GUILayout.Label("In the back room " + p.Back.Total + ", on order " + p.OnOrder + ".  Sold today " + p.SoldToday + ".", hud.Small);
+                    else GUILayout.Label("In the back room " + p.Back.Total + ", on the way " + p.Incoming + ".  Sold today " + p.SoldToday + ".", hud.Small);
                 }
                 if (f.IsCounter) GUILayout.Label("Clerk: " + (f.Clerk != null ? f.Clerk.DisplayName : "none") + "   waiting: " + f.Waiting.Count, hud.Small);
 
@@ -249,7 +251,7 @@ namespace StoreManager
                 {
                     GUILayout.Label("What goes here:", hud.Bold);
                     if (choices.Count < Catalog.ProductsFor(f.Def).Count)
-                        GUILayout.Label("More products unlock with licences (Licences tab).", hud.Small);
+                        GUILayout.Label("More products unlock with licences (Licences app).", hud.Small);
                     for (int i = 0; i < choices.Count; i += 2)
                     {
                         GUILayout.BeginHorizontal();
@@ -266,12 +268,12 @@ namespace StoreManager
                     if (f.Product != null && !f.Product.Baked)
                     {
                         GUILayout.BeginHorizontal();
-                        if (GUILayout.Button("Order 1 case", GUILayout.Width(120f))) store.Order(f.Product, f.Product.Def.CaseSize);
-                        if (GUILayout.Button("Order to par", GUILayout.Width(120f)))
+                        if (GUILayout.Button("+1 case to cart", GUILayout.Width(130f)))
                         {
-                            int n = store.OrderToPar(f.Product, 0f);
-                            Hud.Toast(n > 0 ? "Ordered " + f.Product.Name + " up to par." : f.Product.Name + " is already at par.");
+                            store.Cart.Add(f.Product, 1);
+                            Hud.Toast(f.Product.Name + ": " + store.Cart.CasesOf(f.Product) + " cases in the cart. Pay in the Shop app.");
                         }
+                        GUILayout.Label(store.Cart.CasesOf(f.Product) > 0 ? "In cart: " + store.Cart.CasesOf(f.Product) : "", hud.Small);
                         GUILayout.EndHorizontal();
                     }
                 }

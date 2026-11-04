@@ -44,13 +44,22 @@ manager and grow the store.
   Walk over to resolve it before they give up and leave.
 - **Fixtures:** click a shelf to see what it holds and how full it is.
 
-### Office mode
-- Walk into your office and press **Tab** (or the "Sit at desk" button).
-- The camera detaches: **WASD** pans over the whole store, Q/E rotate, wheel
-  zooms.
-- All management screens are here, and only here: Overview, Build, Products,
-  Licences, Staff, Hire, Delegation, Expansion, Finances.
-- Press **Tab** again to get up and walk the floor.
+### Office computer
+- Walk into your office and press **Tab** (or the "Sit at desk" button). The
+  camera moves onto the monitor and the **office computer** fills the screen,
+  like the PC in Supermarket Simulator.
+- The desktop has app icons, draggable windows and a taskbar (get up, build,
+  open apps, game speed, clock). Widgets on the right show today's numbers,
+  level progress, alerts and the latest messages.
+- Apps, all only here: **Shop** (buy stock), **Products** (prices and stock
+  levels), **Licences**, **Staff**, **Hiring**, **Assistant** (delegation),
+  **Stats** (today and the last 7 days), **Expansion**, **Inbox** (all
+  messages).
+- **Build** leaves the screen for the overhead camera: **WASD** pans over the
+  whole store, Q/E rotate, wheel zooms; place fixtures and pick shelf products.
+  **Esc** goes back to the computer.
+- Esc on the computer closes the front window. **Tab** gets up and walks the
+  floor.
 
 ## Progression: levels and licences
 
@@ -127,10 +136,12 @@ floor is placed by you, from the **office desk** (Build tab):
   more profit per item but fewer customers buy, and satisfaction drops.
 - Stock lives on the fixtures and in the **back room**. Stockers move it from
   the back to the emptiest shelves. Perishables age each night and expire.
-- **Par level** per product = how much to keep on hand. A new product starts
-  at about two days of expected sales ("Suggest pars" recalculates all of
-  them). "Order to par" orders the difference. Orders come with the 06:00 truck, or by **express** within
-  an hour for 25% more (handy for opening day).
+- **Ordering is a shopping cart** (Shop app): the catalogue lists every
+  licensed product with its case size, case price and current stock (shelf,
+  back room, on the way). Add cases, then pay: delivery by the **06:00 truck**,
+  or **express** in about an hour for 25% more (handy for opening day).
+- Orders are paid at checkout. The cart can't be bigger than the free
+  back-room space (stock already on the way counts).
 
 ## Staff
 
@@ -155,8 +166,9 @@ floor is placed by you, from the **office desk** (Build tab):
 One employee can be the assistant manager. While on shift they walk the
 store (staff near them work 5% faster) and do the jobs you delegate:
 
-- **Ordering:** orders everything on sale up to par an hour before their
-  shift ends. Low leadership means less accurate orders.
+- **Ordering:** an hour before their shift ends, buys stock for the 06:00
+  truck: about two days of sales of everything on sale, within back-room
+  space and cash. Low leadership means less accurate orders.
 - **Complaints:** walks over to complaining customers (less effective than
   you).
 - **Checkouts:** jumps on a free till when queues get long.
@@ -178,9 +190,10 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 ## Economy
 
 - Cash, daily ledger: sales, wholesale, wages, rent, construction, waste.
-- **Orders** arrive by truck at 06:00 and are paid on delivery. The back room
-  holds 5,000 units (+2,000 per expansion); if a delivery doesn't fit, every
-  product gets a fair share and the rest is refused (not paid for).
+- **Orders** are paid at checkout and arrive by truck at 06:00 (or express).
+  The back room holds 5,000 units (+2,000 per expansion). If a delivery still
+  doesn't fit (for example after clearing shelves into the back), every
+  product gets a fair share and the rest is refunded.
 - Rent is charged every midnight and grows with expansion.
 - Start with $20,000, a cashier for each shift and a morning stocker. Rent
   $350/day. A starter shop (2 checkouts, 6 shelves) plus express opening stock

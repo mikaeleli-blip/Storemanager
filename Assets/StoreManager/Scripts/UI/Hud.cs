@@ -7,7 +7,7 @@ namespace StoreManager
     /// Grey-box IMGUI interface: top bar, alerts, message log, selection panels, build mode and the office
     /// desk screens. To be replaced by UI Toolkit later.
     /// </summary>
-    public class Hud : MonoBehaviour
+    public partial class Hud : MonoBehaviour
     {
         public static bool PointerOverUI;
         public static Hud I;
@@ -19,9 +19,6 @@ namespace StoreManager
         public Employee Selected;
         public Customer SelectedCustomer;
 
-        int tab = 1;
-        Vector2 scroll;
-        bool minimized;
         int hireRole, hireShift;
         Employee confirmFire;
         float confirmTime;
@@ -38,8 +35,6 @@ namespace StoreManager
         public GUIStyle Header { get { return header; } }
         public GUIStyle Rich { get { return rich; } }
 
-        static readonly string[] Tabs = { "Overview", "Build", "Products", "Licences", "Staff", "Hire", "Delegation", "Expansion", "Finances" };
-        const int BuildTab = 1;
         static readonly string[] RoleNames = { "Cashier", "Stocker", "Cleaner", "Baker", "Deli Clerk", "Asst. Mgr" };
         static readonly string[] ShiftNames = { "Morning", "Evening", "Night" };
 
@@ -51,15 +46,6 @@ namespace StoreManager
         void Start()
         {
             store = Store.I;
-        }
-
-        public void ShowTab(int t)
-        {
-            tab = t;
-            scroll = Vector2.zero;
-            minimized = false;
-            if (t == BuildTab) BuildMode.I.Open();
-            else BuildMode.I.Close();
         }
 
         public static void Toast(string text)
@@ -81,14 +67,31 @@ namespace StoreManager
             var gm = new Vector2(m.x / S, (Screen.height - m.y) / S);
             bool over = GUIUtility.hotControl != 0;
             for (int i = 0; i < rects.Count; i++) if (rects[i].Contains(gm)) { over = true; break; }
+            bool pc = store.Avatar.AtDesk && OnPC;
+            if (pc) over = true;
             PointerOverUI = over;
 
-            if (GameInput.Down(GameKey.Escape) && !BuildMode.I.Busy) { Selected = null; SelectedCustomer = null; }
-            if (store.Avatar.AtDesk && tab == BuildTab && !BuildMode.I.Active) BuildMode.I.Open();
-            HandleWorldClicks();
+            if (GameInput.Down(GameKey.Escape)) HandleEscape();
+            if (store.Avatar.AtDesk && !OnPC && !BuildMode.I.Active) BuildMode.I.Open();
+            if (!pc) HandleWorldClicks();
 
             alertTimer -= Time.unscaledDeltaTime;
             if (alertTimer <= 0f) { alertTimer = 0.5f; BuildAlerts(); }
+        }
+
+        void HandleEscape()
+        {
+            var av = store.Avatar;
+            if (av.AtDesk && OnPC) { CloseTopWindow(); return; }
+            if (BuildMode.I.Busy || BuildMode.I.EscFrame == Time.frameCount) return;
+            if (Selected != null || SelectedCustomer != null || BuildMode.I.Selected != null)
+            {
+                Selected = null;
+                SelectedCustomer = null;
+                BuildMode.I.Selected = null;
+                return;
+            }
+            if (av.AtDesk) OpenPC();
         }
 
         void HandleWorldClicks()
@@ -144,7 +147,7 @@ namespace StoreManager
                 alerts.Add("<color=#ff6655>! " + c.DisplayName + " wants the manager, " + left + " min left" + who + "</color>");
             }
 
-            if (store.Lanes.Count == 0) alerts.Add("<color=#ff6655>No checkouts yet. Build some at your desk.</color>");
+            if (store.Lanes.Count == 0) alerts.Add("<color=#ff6655>No checkouts yet. Place some with the Build app.</color>");
             else if (clk.IsOpen && store.OpenLaneCount == 0) alerts.Add("<color=#ff6655>No checkout is open!</color>");
             else if (clk.IsOpen && store.QueuePressure()) alerts.Add("<color=#ffcc55>Long checkout queues.</color>");
 
@@ -152,7 +155,7 @@ namespace StoreManager
             for (int i = 0; i < store.Fixtures.Count; i++)
                 if (store.Fixtures[i].HoldsProducts && store.Fixtures[i].Product == null) emptyFixtures++;
             for (int i = 0; i < store.Products.Count; i++) if (store.Products[i].Carried) carried++;
-            if (store.Fixtures.Count > 0 && carried == 0) alerts.Add("<color=#ffcc55>No products on sale. Click a shelf at your desk to choose one.</color>");
+            if (store.Fixtures.Count > 0 && carried == 0) alerts.Add("<color=#ffcc55>No products on sale. In Build, click a shelf to choose one.</color>");
             if (emptyFixtures > 0) alerts.Add("<color=#ffcc55>" + emptyFixtures + " shelves have no product chosen.</color>");
 
             if (store.CountFixtures("bakery_shelf") > 0)
@@ -169,7 +172,7 @@ namespace StoreManager
                 var p = store.Products[i];
                 if (!p.Carried || p.ShelfTotal > 0) continue;
                 if (p.Back.Total > 0) needStocking++;
-                else if (!p.Baked && p.OnOrder == 0) soldOut++;
+                else if (!p.Baked && p.Incoming == 0) soldOut++;
             }
             if (needStocking > 0) alerts.Add("<color=#ffcc55>" + needStocking + " products sit in the back with empty shelves.</color>");
             if (soldOut > 0) alerts.Add("<color=#ff8866>" + soldOut + " products have no stock and nothing on order.</color>");
@@ -179,8 +182,8 @@ namespace StoreManager
                 string extra = store.Staff.OnShiftCount(Role.Cleaner) == 0 ? " No cleaner on shift." : "";
                 alerts.Add("<color=#ffcc55>" + store.Dirt.Spills.Count + " spills on the floor." + extra + "</color>");
             }
-            if (clk.Hour >= 18 && store.OnOrderTotal == 0 && carried > 0)
-                alerts.Add("<color=#ffcc55>Nothing on order for tomorrow's delivery.</color>");
+            if (clk.Hour >= 18 && store.OnOrderTotal == 0 && carried > 0 && !(store.Delegation.Ordering && store.Staff.Assistant != null))
+                alerts.Add("<color=#ffcc55>Nothing ordered for tomorrow's truck (Shop app).</color>");
             if (store.Economy.Cash < 0f) alerts.Add("<color=#ff6655>The store is in the red.</color>");
         }
 
@@ -216,11 +219,18 @@ namespace StoreManager
             float sw = Screen.width / S, sh = Screen.height / S;
             if (Event.current.type == EventType.Layout) rects.Clear();
 
+            if (store.Avatar.AtDesk && OnPC)
+            {
+                if (PcVisible) DrawPC(sw, sh);
+                DrawToast(sw, sh);
+                return;
+            }
+
             DrawWorldLabels();
             DrawTopBar(sw);
             DrawAlerts(sw);
             DrawLog(sh);
-            if (store.Avatar.AtDesk) DrawOffice(sw, sh);
+            if (store.Avatar.AtDesk) DrawBuildView(sw, sh);
             else DrawFloor(sw, sh);
             BuildMode.I.DrawFixturePanel(this, sw, sh, 48f + alertsHeight);
             DrawSelection(sw, sh);
@@ -437,54 +447,13 @@ namespace StoreManager
 
         // ------------------------------------------------------------------ office mode
 
-        void DrawOffice(float sw, float sh)
+        void DrawBuildView(float sw, float sh)
         {
             var hint = new Rect(576f, sh - 40f, Mathf.Max(300f, sw - 576f - 416f), 32f);
             Panel(hint);
-            string hintText = tab == BuildTab
-                ? "Build: pick a fixture, click to place, R rotates, right-click cancels. Click a shelf to choose its product.  WASD/Q/E/wheel: camera"
-                : "At your desk.  WASD: move camera   Q/E: rotate   Wheel: zoom   Click a shelf to see it   Tab: get up";
-            GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f), hintText, small);
-
-            // Tab strip (always visible at the desk)
-            float tw = Mathf.Min(760f, sw - 640f);
-            var strip = new Rect(sw * 0.5f - tw * 0.5f, 40f, tw, 34f);
-            if (tab == BuildTab) strip = new Rect(316f, 40f, Mathf.Min(760f, sw - 316f - 416f), 34f);
-            Panel(strip);
-            GUILayout.BeginArea(new Rect(strip.x + 4f, strip.y + 4f, strip.width - 8f, 28f));
-            GUILayout.BeginHorizontal();
-            int newTab = GUILayout.Toolbar(tab, Tabs);
-            if (newTab != tab) ShowTab(newTab);
-            if (tab != BuildTab && GUILayout.Button(minimized ? "+" : "_", W(28))) minimized = !minimized;
-            if (GUILayout.Button("Get up", W(70))) { BuildMode.I.Close(); store.Avatar.StandUp(); }
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-
-            if (tab == BuildTab)
-            {
-                BuildMode.I.DrawPalette(this, sw, sh);
-                return;
-            }
-            if (minimized) return;
-
-            float w = Mathf.Min(900f, sw - 16f);
-            var r = new Rect(sw * 0.5f - w * 0.5f, 80f, w, Mathf.Max(300f, sh - 80f - 190f));
-            Panel(r);
-            GUILayout.BeginArea(new Rect(r.x + 8f, r.y + 6f, r.width - 16f, r.height - 12f));
-            scroll = GUILayout.BeginScrollView(scroll);
-            switch (tab)
-            {
-                case 0: OverviewTab(); break;
-                case 2: ProductsTab(); break;
-                case 3: LicencesTab(); break;
-                case 4: StaffTab(); break;
-                case 5: HireTab(); break;
-                case 6: DelegationTab(); break;
-                case 7: ExpansionTab(); break;
-                default: FinancesTab(); break;
-            }
-            GUILayout.EndScrollView();
-            GUILayout.EndArea();
+            GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f),
+                "Build: pick a fixture, click to place, R rotates, right-click cancels. Click a shelf to choose its product.  WASD/Q/E/wheel: camera   Esc: back to the computer", small);
+            BuildMode.I.DrawPalette(this, sw, sh);
         }
 
         void OverviewTab()
@@ -540,111 +509,12 @@ namespace StoreManager
                 var p = store.Products[i];
                 if (!p.Carried || p.ShelfTotal > 0) continue;
                 string why = p.Baked ? "needs baking" : p.Back.Total > 0 ? p.Back.Total + " in the back, needs stocking"
-                    : p.OnOrder > 0 ? p.OnOrder + " on order" : "<color=#ff7766>no stock, order more</color>";
+                    : p.Incoming > 0 ? p.Incoming + " on the way" : "<color=#ff7766>no stock, order more</color>";
                 GUILayout.Label(p.Name + ": " + why, rich);
                 shown++;
             }
             if (shown == 0) GUILayout.Label("None.", small);
             GUILayout.Label("Back room " + store.BackStockTotal + " / " + store.BackCapacity + " units.  On order: " + store.OnOrderTotal + " units.", small);
-        }
-
-        void ProductsTab()
-        {
-            GUILayout.Label("Products", header);
-            GUILayout.Label("Choose products by clicking shelves in Build. Buy licences to sell more. Par = how much you want on hand (shelves + back + ordered). Orders arrive with the 06:00 truck, or within an hour by express (+25%).", small);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Order everything to par", W(200)))
-            {
-                int n = store.OrderAllToPar(0f);
-                Toast(n > 0 ? "Ordered " + n + " products up to par." : "Everything on sale is at par.");
-            }
-            if (GUILayout.Button("Suggest pars", W(110)))
-            {
-                store.SuggestAllPars();
-                Toast("Pars set to about two days of sales for your current range.");
-            }
-            GUI.enabled = store.OnOrderTotal > 0 && !store.ExpressPending;
-            if (GUILayout.Button(store.ExpressPending ? "Express on its way" : "Express delivery now (+25%)", W(220)))
-                store.OrderExpress();
-            GUI.enabled = true;
-            GUILayout.Label("On order " + store.OnOrderTotal + " units (" + Money(store.OnOrderCost) + ").  Back room "
-                + store.BackStockTotal + " / " + store.BackCapacity, small);
-            GUILayout.EndHorizontal();
-            GUILayout.Space(6f);
-
-            for (int c = 0; c < store.Categories.Count; c++)
-            {
-                var cat = store.Categories[c];
-                bool anyLicensed = false;
-                for (int i = 0; i < cat.Products.Count; i++) if (store.IsLicensed(cat.Products[i].Def)) anyLicensed = true;
-                if (!anyLicensed) continue;
-                GUILayout.BeginVertical("box");
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(cat.Name, header, W(160));
-                GUILayout.Label("Prices", W(45));
-                if (GUILayout.Button("-5%", W(42))) cat.PriceMult = Mathf.Max(0.8f, cat.PriceMult - 0.05f);
-                GUILayout.Label(Mathf.RoundToInt(cat.PriceMult * 100f) + "%", bold, W(44));
-                if (GUILayout.Button("+5%", W(42))) cat.PriceMult = Mathf.Min(1.5f, cat.PriceMult + 0.05f);
-                GUILayout.Label("Sales today " + Money(cat.SalesToday) + (cat.Def.Baked ? "   (baked on site)" : ""), W(260));
-                GUILayout.EndHorizontal();
-
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("<b>Product</b>", rich, W(110));
-                GUILayout.Label("<b>Shelves</b>", rich, W(60));
-                GUILayout.Label("<b>On shelf</b>", rich, W(70));
-                GUILayout.Label("<b>Back</b>", rich, W(50));
-                GUILayout.Label("<b>Ordered</b>", rich, W(55));
-                GUILayout.Label("<b>Par</b>", rich, W(110));
-                GUILayout.Label("<b>Sold</b>", rich, W(40));
-                GUILayout.Label("<b>Missed</b>", rich, W(50));
-                GUILayout.Label("<b>Waste</b>", rich, W(45));
-                GUILayout.EndHorizontal();
-
-                for (int i = 0; i < cat.Products.Count; i++)
-                {
-                    var p = cat.Products[i];
-                    int cs = p.Def.CaseSize;
-                    if (!store.IsLicensed(p.Def))
-                    {
-                        GUILayout.Label("<color=#777777>" + p.Name + "   (" + p.Def.Licence.Name + " licence, level " + p.Def.Licence.Level + ")</color>", rich);
-                        continue;
-                    }
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label(p.Carried ? p.Name : "<color=#999999>" + p.Name + "</color>", rich, W(110));
-                    GUILayout.Label(p.Fixtures.Count.ToString(), W(60));
-                    if (p.Carried)
-                    {
-                        float fill = p.ShelfFill;
-                        string col = fill > 0.5f ? "#9dff9d" : fill > 0.2f ? "#ffd166" : "#ff7766";
-                        GUILayout.Label("<color=" + col + ">" + p.ShelfTotal + "/" + p.ShelfCap + "</color>", rich, W(70));
-                    }
-                    else GUILayout.Label("-", W(70));
-                    if (p.Baked)
-                    {
-                        GUILayout.Label("-", W(50));
-                        GUILayout.Label("-", W(55));
-                        GUILayout.Label("-", W(110));
-                    }
-                    else
-                    {
-                        GUILayout.Label(p.Back.Total.ToString(), W(50));
-                        GUILayout.Label(p.OnOrder.ToString(), W(55));
-                        if (GUILayout.Button("-", W(24))) p.Par = Mathf.Max(cs, p.Par - cs);
-                        GUILayout.Label(p.Par.ToString(), W(52));
-                        if (GUILayout.Button("+", W(24))) p.Par += cs;
-                    }
-                    GUILayout.Label(p.SoldToday.ToString(), W(40));
-                    GUILayout.Label(p.MissedToday.ToString(), W(50));
-                    GUILayout.Label(p.WastedLastNight.ToString(), W(45));
-                    if (!p.Baked)
-                    {
-                        if (GUILayout.Button("+1 case", W(64))) store.Order(p, cs);
-                        if (GUILayout.Button("+5", W(34))) store.Order(p, cs * 5);
-                    }
-                    GUILayout.EndHorizontal();
-                }
-                GUILayout.EndVertical();
-            }
         }
 
         void LicencesTab()
@@ -794,7 +664,7 @@ namespace StoreManager
                 GUILayout.Label("You have no assistant manager.", header);
                 string amLock = store.RoleLock(Role.AssistantManager);
                 if (amLock != null) GUILayout.Label("<color=#ff9977>Assistant managers unlock at level " + Catalog.RoleLevel(Role.AssistantManager) + ".</color>", rich);
-                else GUILayout.Label("Hire one in the Hire tab (pick Asst. Mgr), or change someone's role in the Staff tab. Leadership decides how well they do.", rich);
+                else GUILayout.Label("Hire one in the Hiring app (pick Asst. Mgr), or change someone's role in the Staff app. Leadership decides how well they do.", rich);
             }
             else
             {
@@ -804,7 +674,7 @@ namespace StoreManager
                 GUILayout.Label("They only do these jobs while on shift.", small);
             }
             GUILayout.Space(8f);
-            del.Ordering = GUILayout.Toggle(del.Ordering, " Ordering: order everything on sale to par an hour before their shift ends.");
+            del.Ordering = GUILayout.Toggle(del.Ordering, " Ordering: an hour before their shift ends, buy stock for the 06:00 truck (about two days of sales, within back-room space and cash).");
             del.Complaints = GUILayout.Toggle(del.Complaints, " Complaints: go and calm down customers who want the manager.");
             del.Checkouts = GUILayout.Toggle(del.Checkouts, " Checkouts: open a till when queues get long.");
             del.Morale = GUILayout.Toggle(del.Morale, " Staff morale: chat with staff while walking the floor.");

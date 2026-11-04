@@ -8,23 +8,26 @@ and grow the store. See [docs/DESIGN.md](docs/DESIGN.md).
 
 1. Open the folder in Unity Hub (Unity **6000.6.5f1**).
 2. Open any scene (the empty default scene is fine) and press **Play**.
-   The game builds itself at startup (`Bootstrap.cs`). You start at your
-   office desk with an empty corner shop and time paused: build, pick
-   products, order (express for day one), then press 1-4 to start the clock.
+   The game builds itself at startup (`Bootstrap.cs`). You start at the
+   office computer with an empty corner shop and time paused: open **Build**,
+   place a checkout and shelves, pick products, buy stock in the **Shop** app
+   (express for day one), then press 1-4 to start the clock.
    Sales earn XP; store levels and cash unlock licences (Licences tab) for
    new products, departments, staff roles and expansions.
 
 ## Controls
 
-| | Floor (walking) | Office desk |
-|---|---|---|
-| Move | WASD, or right-click a spot | WASD pans the camera |
-| Rotate / zoom | Q / E, mouse wheel | Q / E, mouse wheel |
-| Talk to staff | Left-click someone within 3 m | — |
-| Build | — | Build tab: pick a fixture, left-click to place, R rotate, right-click cancel |
-| Shelf product | — | Click a shelf, pick its product |
-| Desk | Tab (when in the office) | Tab to get up |
-| Time | Space pause, 1–4 speed | same |
+| | Floor (walking) | Office computer | Build (from the computer) |
+|---|---|---|---|
+| Move | WASD, or right-click a spot | — | WASD pans the camera |
+| Rotate / zoom | Q / E, mouse wheel | — | Q / E, mouse wheel |
+| Talk to staff | Left-click someone within 3 m | — | — |
+| Apps | — | Click desktop icons; drag windows by the title bar | — |
+| Build | — | Build icon or taskbar button | Pick a fixture, left-click to place, R rotate, right-click cancel |
+| Shelf product | — | — | Click a shelf, pick its product |
+| Back / close | — | Esc closes the front window | Esc back to the computer |
+| Desk | Tab (in the office) sits down | Tab gets up | Tab gets up |
+| Time | Space pause, 1–4 speed | same, or taskbar | same |
 
 ## Layout
 

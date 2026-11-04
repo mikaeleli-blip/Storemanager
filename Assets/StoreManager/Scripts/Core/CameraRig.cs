@@ -16,6 +16,13 @@ namespace StoreManager
         public Transform FollowTarget;
         public Vector2 BoundsMin, BoundsMax;
 
+        // Locked pose (the office computer screen). Blend runs 0..1 so the move is smooth both ways.
+        public bool Locked;
+        public Vector3 LockPosition;
+        public Quaternion LockRotation = Quaternion.identity;
+        public float LockBlend;
+        public bool AtLockPose { get { return Locked && LockBlend >= 0.999f; } }
+
         public const float MinDistance = 10f;
         public const float MaxDistance = 130f;
 
@@ -26,14 +33,18 @@ namespace StoreManager
         {
             float dt = Time.unscaledDeltaTime;
 
-            if (GameInput.Held(GameKey.Q)) Yaw += 90f * dt;
-            if (GameInput.Held(GameKey.E)) Yaw -= 90f * dt;
+            LockBlend = Mathf.MoveTowards(LockBlend, Locked ? 1f : 0f, dt * 1.8f);
+            bool input = !Locked && LockBlend <= 0f;
+
+            if (input && GameInput.Held(GameKey.Q)) Yaw += 90f * dt;
+            if (input && GameInput.Held(GameKey.E)) Yaw -= 90f * dt;
 
             float scroll = GameInput.Scroll;
-            if (Mathf.Abs(scroll) > 0.001f && !Hud.PointerOverUI)
+            if (input && Mathf.Abs(scroll) > 0.001f && !Hud.PointerOverUI)
                 Distance = Mathf.Clamp(Distance * (1f - scroll * 0.12f), MinDistance, MaxDistance);
 
-            if (FreeMode)
+            if (!input) { }
+            else if (FreeMode)
             {
                 Vector3 move = Vector3.zero;
                 if (GameInput.Held(GameKey.W)) move += FlatForward;
@@ -53,7 +64,14 @@ namespace StoreManager
             Focus.y = 0f;
 
             Quaternion rot = Quaternion.Euler(Pitch, Yaw, 0f);
-            transform.position = Focus - rot * Vector3.forward * Distance;
+            Vector3 pos = Focus - rot * Vector3.forward * Distance;
+            if (LockBlend > 0f)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, LockBlend);
+                pos = Vector3.Lerp(pos, LockPosition, t);
+                rot = Quaternion.Slerp(rot, LockRotation, t);
+            }
+            transform.position = pos;
             transform.rotation = rot;
         }
     }
