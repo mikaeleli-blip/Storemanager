@@ -101,7 +101,7 @@ a new game):
 | Dairy Department | 3 | $4,000 | Fridges; Milk, Eggs, Yogurt |
 | Salad Vegetables | 4 | $1,800 | Tomatoes, Lettuce (needs Produce) |
 | Household Department | 4 | $2,500 | Toilet Paper, Dish Soap |
-| Frozen Food | 5 | $3,500 | Frozen Pizza, Ice Cream (needs Dairy) |
+| Frozen Food | 5 | $3,500 | Chest freezers; Frozen Pizza, Ice Cream (needs Dairy) |
 | Cheese | 5 | $1,500 | Cheese (needs Dairy) |
 | Bakery Department | 6 | $8,000 | Oven, bakery shelves, bakers; Fresh Bread, Croissants |
 | Cleaning & Batteries | 6 | $2,000 | Detergent, Batteries (needs Household) |
@@ -125,7 +125,8 @@ floor is placed by you, from the **office desk** (Build tab):
 | Fixture | Size | Cost | Holds |
 |---|---|---|---|
 | Shelf (gondola) | 1x2 | $800 | Grocery or household, 64 units |
-| Fridge | 1x2 | $2,400 | Dairy & frozen, 48 units |
+| Fridge | 1x2 | $2,400 | Dairy, 48 units (double-sided, glass doors) |
+| Chest freezer | 1x2 | $2,600 | Frozen food, 40 units (island freezer, sliding glass lids) |
 | Produce table | 1x2 | $900 | Fruit & veg, 50 units |
 | Bakery shelf | 1x2 | $700 | Baked goods, 36 units (needs an oven + baker) |
 | Deli counter | 3x1 | $4,500 | Deli & meat, 40 units (needs a deli clerk) |
@@ -149,9 +150,9 @@ floor is placed by you, from the **office desk** (Build tab):
 
 ## Products and prices
 
-- Six categories: Grocery, Household (shelves), Produce (tables), Dairy &
-  Frozen (fridges), Bakery (bakery shelves, baked on site), Deli & Meat
-  (counters).
+- Seven categories: Grocery, Household (shelves), Produce (tables), Dairy
+  (fridges), Frozen (chest freezers), Bakery (bakery shelves, baked on site),
+  Deli & Meat (counters).
 - Each category has a **price level** (80%–150% of base). Higher prices mean
   more profit per item but fewer customers buy, and satisfaction drops.
 - Stock lives on the fixtures and in the **back room**. Stockers move it from

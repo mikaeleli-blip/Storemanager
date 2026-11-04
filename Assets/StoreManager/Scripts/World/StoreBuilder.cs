@@ -245,6 +245,7 @@ namespace StoreManager
             switch (d.Id)
             {
                 case "fridge": return new Color(0.5f, 0.7f, 0.9f);
+                case "freezer": return new Color(0.75f, 0.88f, 0.95f);
                 case "produce": return new Color(0.55f, 0.4f, 0.25f);
                 case "bakery_shelf": return new Color(0.8f, 0.65f, 0.45f);
                 case "deli_counter": return new Color(0.85f, 0.4f, 0.35f);

@@ -82,11 +82,14 @@ def preview_scene():
             kit.instance(g, (gx, 0, i + 0.5))
             stock_on(g, (gx, i + 0.5), fixtures.LEVELS, names[i:] + names[:i])
         kit.instance(get('GondolaEnd'), (gx, 0, 0.0))
-    # fridge run
-    for i in range(4):
+    # fridge run (dairy) and a chest freezer (frozen)
+    for i in range(2):
         kit.instance(get('Fridge'), (6.0, 0, i + 0.5))
         stock_on(None, (6.0, i + 0.5), fixtures.LEVELS,
-                 ['Stock_Milk', 'Stock_Yogurt', 'Stock_Cheese', 'Stock_Eggs', 'Stock_Ice_Cream', 'Stock_Frozen_Pizza'][i:] + ['Stock_Milk'])
+                 ['Stock_Milk', 'Stock_Yogurt', 'Stock_Cheese', 'Stock_Eggs'][i:] + ['Stock_Milk', 'Stock_Yogurt'])
+    for i in range(2):
+        kit.instance(get('Freezer'), (6.0, 0, i + 2.5))
+        stock_on(None, (6.0, i + 2.5), (fixtures.FREEZER_FLOOR,), ['Stock_Frozen_Pizza', 'Stock_Ice_Cream'][i:] + ['Stock_Frozen_Pizza'])
     # produce table
     for i in range(4):
         kit.instance(get('ProduceTable'), (9.0, 0, i + 0.5))
@@ -171,6 +174,16 @@ def render_previews():
     kit.render(os.path.join(PREVIEW, 'shelves_close.png'))
 
 
+def render_cold():
+    """Close-ups of the fridge and the chest freezer with stock, plus the game's camera angle."""
+    kit.setup_render((1400, 900), samples=48)
+    preview_scene()
+    kit.camera_look((6.0, 0.9, 2.0), yaw_deg=-60, pitch_deg=30, dist=4.6, fov=42)
+    kit.render(os.path.join(PREVIEW, 'cold_close.png'))
+    kit.camera_look((6.0, 0.5, 2.5), yaw_deg=-35, pitch_deg=55, dist=9.0, fov=34)
+    kit.render(os.path.join(PREVIEW, 'cold_game_view.png'))
+
+
 def render_items(pages=None):
     pages = pages or ITEM_PAGES
     kit.setup_render((1600, 900), samples=48)
@@ -199,6 +212,8 @@ def export_all(made):
     groups = (('products', 'Products.fbx'), ('fixtures', 'Fixtures.fbx'), ('decor', 'Decor.fbx'))
     if ONLY_PRODUCTS:
         groups = groups[:1]
+    if ONLY_FIXTURES:
+        groups = groups[1:2]
     for group, fname in groups:
         objs = made[group]
         for o in objs:
@@ -209,13 +224,18 @@ def export_all(made):
 
 
 ONLY_PRODUCTS = False
+ONLY_FIXTURES = False
 
 if __name__ == '__main__':
     args = sys.argv[1:]
     ONLY_PRODUCTS = '--products-only' in args
+    ONLY_FIXTURES = '--fixtures-only' in args
     made = build_all()
     counts = {k: sum(len(o.data.polygons) for o in v) for k, v in made.items()}
     print('built', {k: len(v) for k, v in made.items()}, 'faces', counts)
+    if '--cold' in args:
+        render_cold()
+        made = build_all()
     if '--fixes' in args:
         render_items(ITEM_PAGES_FIX)
         made = build_all()

@@ -174,7 +174,13 @@ namespace StoreManager
             {
                 Id = "fridge", Name = "Fridge", Model = "Fridge", Kind = FixtureKind.Shelf, W = 1, D = 2,
                 Cost = 2400f, Capacity = 48, Levels = four, Segments = shelfSegs, Access = shelfAccess,
-                Description = "2 m open fridge for dairy and frozen food.",
+                Description = "2 m double-sided glass-door fridge for dairy.",
+            });
+            AddFixture(new FixtureDef
+            {
+                Id = "freezer", Name = "Chest freezer", Model = "Freezer", Kind = FixtureKind.Shelf, W = 1, D = 2,
+                Cost = 2600f, Capacity = 40, Levels = new[] { 0.45f }, Segments = shelfSegs, Access = shelfAccess,
+                Description = "2 m island chest freezer with sliding glass lids, for frozen food.",
             });
             AddFixture(new FixtureDef
             {
@@ -232,13 +238,15 @@ namespace StoreManager
             P(produce, "Tomatoes", 0.8f, 1.8f, 5, 0.9f, 30);
             P(produce, "Lettuce", 0.7f, 1.6f, 4, 0.7f, 24);
 
-            var dairy = Cat("dairy", "Dairy & Frozen", "#7fb3e6", "fridge");
+            var dairy = Cat("dairy", "Dairy", "#7fb3e6", "fridge");
             P(dairy, "Milk", 0.7f, 1.4f, 7, 1.4f, 24);
             P(dairy, "Eggs", 1.5f, 3.0f, 21, 1.0f, 12);
             P(dairy, "Cheese", 2.5f, 4.8f, 30, 0.9f, 12);
             P(dairy, "Yogurt", 0.5f, 1.1f, 14, 0.9f, 24);
-            P(dairy, "Frozen Pizza", 2.2f, 4.5f, 0, 0.8f, 12);
-            P(dairy, "Ice Cream", 2.5f, 5.0f, 0, 0.6f, 12);
+
+            var frozen = Cat("frozen", "Frozen", "#9fd8f0", "freezer");
+            P(frozen, "Frozen Pizza", 2.2f, 4.5f, 0, 0.8f, 12);
+            P(frozen, "Ice Cream", 2.5f, 5.0f, 0, 0.6f, 12);
 
             var household = Cat("household", "Household", "#b48ad6", "gondola");
             P(household, "Detergent", 4.0f, 7.5f, 0, 0.6f, 6);
@@ -297,7 +305,7 @@ namespace StoreManager
             Lic("salad_veg", "Salad Vegetables", 4, 1800f, produceL, false, new[] { "Tomatoes", "Lettuce" }, null, null);
             var householdL = Lic("household", "Household Department", 4, 2500f, null, true, new[] { "Toilet Paper", "Dish Soap" },
                 null, null);
-            Lic("frozen", "Frozen Food", 5, 3500f, dairyL, false, new[] { "Frozen Pizza", "Ice Cream" }, null, null);
+            Lic("frozen", "Frozen Food", 5, 3500f, dairyL, true, new[] { "Frozen Pizza", "Ice Cream" }, new[] { "freezer" }, null);
             Lic("cheese", "Cheese", 5, 1500f, dairyL, false, new[] { "Cheese" }, null, null);
             var bakeryL = Lic("bakery", "Bakery Department", 6, 8000f, null, true, new[] { "Fresh Bread", "Croissants" },
                 new[] { "oven", "bakery_shelf" }, new[] { Role.Baker });

@@ -85,22 +85,101 @@ def gondola_end():
 
 
 def fridge():
+    """
+    Double-sided glass-door fridge, one 1 m section. Two doors per side with frames and handles, an
+    insulated canopy with a light and a blue band, shelves and price strips behind the glass.
+    """
     begin()
-    box_mm((-0.45, 0, -0.5), (0.45, 0.12, 0.5), 'darkgrey')
+    box_mm((-0.46, 0, -0.5), (0.46, 0.12, 0.5), 'darkgrey')
     box_mm((-0.06, 0.12, -0.5), (0.06, 1.75, 0.5), 'offwhite')
-    box_mm((-0.07, 0, -0.5), (0.07, 1.95, -0.46), 'steel_dark')
-    box_mm((-0.46, 1.75, -0.5), (0.46, 1.95, 0.5), 'milk')
-    box_mm((-0.47, 1.8, -0.5), (0.47, 1.9, 0.5), 'white')
+    # canopy
+    box_mm((-0.47, 1.75, -0.5), (0.47, 2.0, 0.5), 'white')
+    box_mm((-0.475, 1.84, -0.5), (0.475, 1.94, 0.5), 'milk')
 
     def side(sg):
+        lo = (lambda a, b: (min(a * sg, b * sg), max(a * sg, b * sg)))
+        # inside: shelves, price strips, lights
         for y in LEVELS[1:]:
-            box_mm((min(0.06 * sg, 0.44 * sg), y - 0.025, -0.5), (max(0.06 * sg, 0.44 * sg), y, 0.5), 'steel')
-            box_mm((min(0.42 * sg, 0.45 * sg), y - 0.04, -0.5), (max(0.42 * sg, 0.45 * sg), y, 0.5), 'price')
-        box_mm((min(0.4 * sg, 0.44 * sg), 1.7, -0.5), (max(0.4 * sg, 0.44 * sg), 1.74, 0.5), 'light_cool')
-        box_mm((min(0.43 * sg, 0.45 * sg), 0.0, -0.5), (max(0.43 * sg, 0.45 * sg), 0.12, 0.5), 'milk')
-        box_mm((min(0.07 * sg, 0.09 * sg), 0.15, -0.5), (max(0.07 * sg, 0.09 * sg), 1.7, 0.5), 'light_cool')
+            x0, x1 = lo(0.06, 0.43)
+            box_mm((x0, y - 0.025, -0.5), (x1, y, 0.5), 'steel')
+            x0, x1 = lo(0.41, 0.435)
+            box_mm((x0, y - 0.04, -0.5), (x1, y, 0.5), 'price')
+        x0, x1 = lo(0.06, 0.075)
+        box_mm((x0, 0.15, -0.5), (x1, 1.7, 0.5), 'light_cool')
+        x0, x1 = lo(0.38, 0.43)
+        box_mm((x0, 1.7, -0.5), (x1, 1.74, 0.5), 'light_cool')
+        # kick plate
+        x0, x1 = lo(0.44, 0.465)
+        box_mm((x0, 0.0, -0.5), (x1, 0.12, 0.5), 'milk')
+        # door frames: posts at the section ends, rails top and bottom, a split in the middle
+        x0, x1 = lo(0.445, 0.475)
+        box_mm((x0, 0.12, -0.5), (x1, 1.75, -0.47), 'steel_dark')
+        box_mm((x0, 0.12, 0.47), (x1, 1.75, 0.5), 'steel_dark')
+        box_mm((x0, 0.12, -0.5), (x1, 0.17, 0.5), 'steel_dark')
+        box_mm((x0, 1.69, -0.5), (x1, 1.75, 0.5), 'steel_dark')
+        box_mm((x0, 0.12, -0.012), (x1, 1.75, 0.012), 'steel_dark')
+        # glass doors
+        g0, g1 = lo(0.452, 0.462)
+        box_mm((g0, 0.17, -0.47), (g1, 1.69, -0.012), 'glass')
+        box_mm((g0, 0.17, 0.012), (g1, 1.69, 0.47), 'glass')
+        # handles by the middle split
+        h0, h1 = lo(0.475, 0.49)
+        box_mm((h0, 0.72, -0.05), (h1, 1.18, -0.035), 'steel')
+        box_mm((h0, 0.72, 0.035), (h1, 1.18, 0.05), 'steel')
+        # canopy light strip
+        l0, l1 = lo(0.47, 0.476)
+        box_mm((l0, 1.78, -0.48), (l1, 1.82, 0.48), 'light')
     both_sides(side)
     return finish('Fridge')
+
+
+FREEZER_FLOOR = 0.45
+
+
+def freezer():
+    """
+    Island chest freezer, one 1 m section, open to both sides under sliding glass lids. Products sit on the
+    floor of the tub (y = FREEZER_FLOOR) either side of a middle divider; the tub is lined frosty blue.
+    """
+    begin()
+    box_mm((-0.46, 0, -0.5), (0.46, 0.1, 0.5), 'darkgrey')
+    box_mm((-0.45, 0.1, -0.5), (0.45, FREEZER_FLOOR - 0.02, 0.5), 'white')
+    box_mm((-0.43, FREEZER_FLOOR - 0.02, -0.5), (0.43, FREEZER_FLOOR, 0.5), 'ice')
+    # middle divider with price strips
+    box_mm((-0.03, FREEZER_FLOOR, -0.5), (0.03, 0.82, 0.5), 'white')
+    box_mm((-0.035, 0.82, -0.5), (0.035, 0.86, 0.5), 'steel')
+    # end walls of the section
+    box_mm((-0.45, FREEZER_FLOOR, -0.5), (0.45, 0.86, -0.485), 'white')
+    box_mm((-0.45, FREEZER_FLOOR, 0.485), (0.45, 0.86, 0.5), 'white')
+
+    def side(sg):
+        lo = (lambda a, b: (min(a * sg, b * sg), max(a * sg, b * sg)))
+        # outer wall with a frosty lining, a blue bumper rail and a steel rim
+        x0, x1 = lo(0.43, 0.46)
+        box_mm((x0, 0.1, -0.5), (x1, 0.86, 0.5), 'white')
+        x0, x1 = lo(0.42, 0.43)
+        box_mm((x0, FREEZER_FLOOR, -0.485), (x1, 0.84, 0.485), 'ice')
+        x0, x1 = lo(0.03, 0.04)
+        box_mm((x0, FREEZER_FLOOR, -0.485), (x1, 0.8, 0.485), 'ice')
+        x0, x1 = lo(0.46, 0.475)
+        box_mm((x0, 0.5, -0.5), (x1, 0.6, 0.5), 'zing')
+        box_mm((x0, 0.1, -0.5), (x1, 0.14, 0.5), 'milk')
+        x0, x1 = lo(0.425, 0.465)
+        box_mm((x0, 0.86, -0.5), (x1, 0.885, 0.5), 'steel')
+        p0, p1 = lo(0.04, 0.05)
+        box_mm((p0, 0.78, -0.48), (p1, 0.82, 0.48), 'price')
+        # two sliding glass lids per side, slightly overlapping, with frames and finger pulls
+        for k, (z0, z1, y) in enumerate(((-0.49, 0.02, 0.868), (-0.02, 0.49, 0.878))):
+            g0, g1 = lo(0.045, 0.425)
+            box_mm((g0, y, z0), (g1, y + 0.006, z1), 'glass')
+            f0, f1 = lo(0.04, 0.43)
+            box_mm((f0, y - 0.002, z0), (f1, y + 0.008, z0 + 0.018), 'steel')
+            box_mm((f0, y - 0.002, z1 - 0.018), (f1, y + 0.008, z1), 'steel')
+            q0, q1 = lo(0.2, 0.27)
+            zz = z1 - 0.03 if k == 0 else z0 + 0.03
+            box_mm((q0, y + 0.006, zz - 0.012), (q1, y + 0.012, zz + 0.012), 'steel_dark')
+    both_sides(side)
+    return finish('Freezer')
 
 
 PRODUCE_PIVOT = (0.0, 0.8)
@@ -529,12 +608,12 @@ def car(color):
     return finish('Car_' + color)
 
 
-FIXTURES = [gondola, gondola_end, fridge, produce_table, bakery_shelf, oven, deli_counter, deli_back,
+FIXTURES = [gondola, gondola_end, fridge, freezer, produce_table, bakery_shelf, oven, deli_counter, deli_back,
             scale_and_slicer, checkout, lane_pole]
 BUILDING = [wall, wall_window, wall_post, entrance, store_sign, dock_door]
 DECOR = [rack, pallet, truck, desk, office_chair, filing_cabinet, plant, whiteboard, sofa, cart_corral,
          basket_stack, tree, bench]
 SIGNS = [('Sign_grocery', 'GROCERY', 'gold'), ('Sign_produce', 'PRODUCE', 'green'),
-         ('Sign_dairy', 'DAIRY & FROZEN', 'milk'), ('Sign_household', 'HOUSEHOLD', 'purple'),
+         ('Sign_dairy', 'DAIRY', 'milk'), ('Sign_frozen', 'FROZEN', 'sky'), ('Sign_household', 'HOUSEHOLD', 'purple'),
          ('Sign_bakery', 'BAKERY', 'bread_dark'), ('Sign_deli', 'DELI & MEAT', 'red')]
 CAR_COLORS = ['red', 'sky', 'yellow', 'white', 'darkgrey']
