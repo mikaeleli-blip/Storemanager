@@ -73,7 +73,7 @@ namespace StoreManager
         /// <summary>Where staff sit on their break: by the sofa in the office.</summary>
         public Vector2Int BreakSpot(Employee e)
         {
-            int k = Mathf.Abs(e.GetInstanceID()) % 4;
+            int k = Outfit.Seed(e.DisplayName) % 4;
             return new Vector2Int(5 + k % 2, 28 + k / 2);
         }
         /// <summary>Where the camera sits to look at the office computer screen (desk at 3.5, 31.5, monitor facing -Z).</summary>
