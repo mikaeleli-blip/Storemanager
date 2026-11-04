@@ -1,0 +1,519 @@
+/*
+ * Storemanager UI: "retail till" look.
+ *   VFD display  - the customer display on a till: dark glass, glowing green dot-matrix text (top bar).
+ *   Receipt      - thermal paper, monospace ink, dashed rules, torn edges (alerts, journal, panels).
+ *   Till keys    - chunky plastic keys; coloured function keys for actions.
+ *   Shelf label  - yellow price-tag strip (notices).
+ * Fonts: VT323 (display), IBM Plex Mono (receipts), Barlow Condensed (keys, labels), Libre Barcode 39.
+ */
+
+/* ------------------------------------------------------------------ base */
+
+.root {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    -unity-font-definition: resource("UI/Fonts/IBMPlexMono-Regular");
+    color: #1d1d1b;
+    font-size: 15px;
+}
+
+.layer {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+}
+
+.hidden { display: none; }
+
+.row { flex-direction: row; align-items: center; }
+.col { flex-direction: column; }
+.grow { flex-grow: 1; }
+
+/* ------------------------------------------------------------------ VFD display (top bar) */
+
+.vfd {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 58px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: #151a19;
+    border-bottom-width: 3px;
+    border-bottom-color: #2c3331;
+}
+
+.vfd__glass {
+    flex-direction: row;
+    align-items: center;
+    height: 44px;
+    padding-left: 12px;
+    padding-right: 12px;
+    background-color: #071311;
+    border-width: 2px;
+    border-color: #000000;
+    border-radius: 4px;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.vfd__field {
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 26px;
+}
+
+.vfd__cap {
+    -unity-font-definition: resource("UI/Fonts/VT323-Regular");
+    font-size: 15px;
+    color: #2f7d66;
+    height: 14px;
+    -unity-text-align: lower-left;
+    padding: 0;
+    margin: 0;
+}
+
+.vfd__val {
+    -unity-font-definition: resource("UI/Fonts/VT323-Regular");
+    font-size: 29px;
+    color: #74ffcf;
+    text-shadow: 0 0 6px rgba(116, 255, 207, 0.55);
+    height: 26px;
+    -unity-text-align: upper-left;
+    padding: 0;
+    margin: 0;
+    letter-spacing: 1px;
+}
+
+.vfd__val--warn { color: #ffd166; text-shadow: 0 0 6px rgba(255, 209, 102, 0.55); }
+.vfd__val--bad { color: #ff6b5b; text-shadow: 0 0 6px rgba(255, 107, 91, 0.55); }
+.vfd__val--cool { color: #8fd3ff; text-shadow: 0 0 6px rgba(143, 211, 255, 0.55); }
+
+.vfd__xp {
+    height: 6px;
+    width: 120px;
+    margin-top: 2px;
+    background-color: #12302a;
+}
+
+.vfd__xpfill {
+    height: 6px;
+    background-color: #74ffcf;
+}
+
+.vfd__keys {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 12px;
+}
+
+/* ------------------------------------------------------------------ till keys */
+
+.key {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 19px;
+    color: #2a2926;
+    background-color: #e9e3d3;
+    border-width: 1px;
+    border-color: #a69f8d;
+    border-bottom-width: 4px;
+    border-bottom-color: #9c9480;
+    border-radius: 5px;
+    padding: 2px 12px 0 12px;
+    margin: 0 3px;
+    height: 38px;
+    min-width: 40px;
+    -unity-text-align: middle-center;
+    transition-duration: 0.06s;
+    transition-property: translate, border-bottom-width, background-color;
+}
+
+.key:hover { background-color: #f4efe3; }
+.key:active { translate: 0 2px; border-bottom-width: 2px; }
+.key:disabled { opacity: 0.45; }
+
+.key--on {
+    background-color: #c9c1ac;
+    translate: 0 2px;
+    border-bottom-width: 2px;
+}
+
+.key--green { background-color: #2f9e5e; border-color: #1d6b3e; border-bottom-color: #175a34; color: #ffffff; }
+.key--green:hover { background-color: #39b06b; }
+.key--red { background-color: #c8433a; border-color: #8f2a23; border-bottom-color: #7a221c; color: #ffffff; }
+.key--red:hover { background-color: #d95146; }
+.key--amber { background-color: #f2b632; border-color: #b9841a; border-bottom-color: #a77514; color: #2a2104; }
+.key--amber:hover { background-color: #f7c34d; }
+.key--blue { background-color: #3e6fb0; border-color: #284c7d; border-bottom-color: #213f69; color: #ffffff; }
+.key--blue:hover { background-color: #4b7fc4; }
+.key--dark { background-color: #3a3f3d; border-color: #1c1f1e; border-bottom-color: #121413; color: #d8f5ea; }
+.key--dark:hover { background-color: #474d4b; }
+
+.key--big {
+    font-size: 26px;
+    height: 60px;
+    padding: 4px 22px 0 22px;
+    border-bottom-width: 6px;
+}
+
+.key--small {
+    font-size: 16px;
+    height: 30px;
+    padding: 1px 9px 0 9px;
+    border-bottom-width: 3px;
+}
+
+.key-row { flex-direction: row; align-items: center; margin-top: 8px; }
+
+/* key caps in the controls legend */
+.cap {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 15px;
+    color: #2a2926;
+    background-color: #e9e3d3;
+    border-width: 1px;
+    border-color: #a69f8d;
+    border-bottom-width: 3px;
+    border-bottom-color: #9c9480;
+    border-radius: 4px;
+    padding: 0 6px;
+    margin: 0 2px;
+    height: 24px;
+    min-width: 24px;
+    -unity-text-align: middle-center;
+}
+
+.cap-text {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-SemiBold");
+    font-size: 17px;
+    color: #e9e3d3;
+    margin-right: 16px;
+    margin-left: 3px;
+}
+
+.bottom-center {
+    position: absolute;
+    left: 0; right: 0; bottom: 12px;
+    align-items: center;
+}
+
+.top-center {
+    position: absolute;
+    left: 0; right: 0; top: 70px;
+    align-items: center;
+}
+
+.legend {
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 12px;
+    background-color: rgba(18, 22, 21, 0.86);
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: #2c3331;
+}
+
+/* ------------------------------------------------------------------ receipt paper */
+
+.receipt {
+    background-color: #f7f3e8;
+    padding: 10px 16px 12px 16px;
+    color: #1d1d1b;
+}
+
+.receipt__edge {
+    height: 8px;
+    -unity-background-image-tint-color: #f7f3e8;
+}
+
+.receipt__title {
+    -unity-font-definition: resource("UI/Fonts/IBMPlexMono-Bold");
+    font-size: 16px;
+    -unity-text-align: middle-center;
+    letter-spacing: 2px;
+    margin: 0;
+    padding: 0;
+}
+
+.receipt__sub {
+    font-size: 12px;
+    color: #7b766a;
+    -unity-text-align: middle-center;
+    margin: 0;
+    padding: 0;
+}
+
+.receipt__rule {
+    font-size: 13px;
+    color: #a39d8f;
+    overflow: hidden;
+    white-space: nowrap;
+    margin: 2px 0;
+    padding: 0;
+    height: 16px;
+}
+
+.receipt__line {
+    font-size: 14px;
+    white-space: normal;
+    margin: 1px 0;
+    padding: 0;
+}
+
+.receipt__line--red { color: #c0392b; }
+.receipt__line--amber { color: #a96a00; }
+.receipt__line--faint { color: #8a8577; }
+
+.receipt__total {
+    -unity-font-definition: resource("UI/Fonts/IBMPlexMono-Bold");
+    font-size: 15px;
+}
+
+.barcode {
+    -unity-font-definition: resource("UI/Fonts/LibreBarcode39-Regular");
+    font-size: 40px;
+    color: #1d1d1b;
+    -unity-text-align: middle-center;
+    margin: 0;
+    padding: 0;
+    height: 36px;
+}
+
+/* alerts slip (top right) */
+.alerts {
+    position: absolute;
+    right: 14px;
+    top: 66px;
+    width: 430px;
+}
+
+/* journal tape (bottom left) */
+.journal {
+    position: absolute;
+    left: 14px;
+    bottom: 12px;
+    width: 500px;
+}
+
+.journal .receipt { padding-top: 6px; padding-bottom: 8px; }
+.journal .receipt__line { font-size: 13px; }
+
+/* ------------------------------------------------------------------ shelf-edge label (notices) */
+
+.tag {
+    flex-direction: row;
+    align-items: center;
+    background-color: #f5c242;
+    border-left-width: 10px;
+    border-left-color: #e2463b;
+    padding: 6px 16px 6px 12px;
+    border-radius: 2px;
+}
+
+.tag__text {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 22px;
+    color: #1d1d1b;
+    white-space: normal;
+    max-width: 760px;
+}
+
+/* ------------------------------------------------------------------ name badge (staff panel) */
+
+.badge {
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    width: 470px;
+    background-color: #fbfaf6;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #c9c3b4;
+    overflow: hidden;
+}
+
+.badge__stripe {
+    height: 54px;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 16px;
+    padding-right: 12px;
+}
+
+.badge__name {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 28px;
+    color: #ffffff;
+    flex-grow: 1;
+}
+
+.badge__role {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-SemiBold");
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.badge__body {
+    padding: 10px 16px 12px 16px;
+}
+
+.stat-row { flex-direction: row; flex-wrap: wrap; margin-top: 4px; }
+
+.stat {
+    flex-direction: column;
+    align-items: center;
+    width: 76px;
+    margin: 2px 4px 2px 0;
+    padding: 4px 0;
+    background-color: #eeeadf;
+    border-radius: 4px;
+}
+
+.stat__cap {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-SemiBold");
+    font-size: 14px;
+    color: #6f6a5e;
+}
+
+.stat__val {
+    -unity-font-definition: resource("UI/Fonts/VT323-Regular");
+    font-size: 24px;
+    color: #1d1d1b;
+    height: 22px;
+}
+
+.meter {
+    height: 10px;
+    background-color: #e3ded1;
+    border-radius: 5px;
+    margin: 2px 0 6px 0;
+    overflow: hidden;
+}
+
+.meter__fill { height: 10px; border-radius: 5px; background-color: #2f9e5e; }
+
+.note {
+    font-size: 12px;
+    color: #6f6a5e;
+    white-space: normal;
+    margin-top: 6px;
+}
+
+/* ------------------------------------------------------------------ world labels */
+
+.wlabel {
+    position: absolute;
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 17px;
+    color: #ffffff;
+    background-color: rgba(16, 20, 19, 0.78);
+    padding: 0 7px;
+    border-radius: 3px;
+    -unity-text-align: middle-center;
+    translate: -50% -50%;
+}
+
+.wlabel--name { color: #9fe3ff; }
+.wlabel--alarm { background-color: #c8433a; color: #ffffff; }
+.wlabel--warn { color: #ffb38a; }
+.wlabel--lane {
+    -unity-font-definition: resource("UI/Fonts/VT323-Regular");
+    font-size: 26px;
+    color: #74ffcf;
+    background-color: #071311;
+    border-width: 2px;
+    border-color: #000000;
+    padding: 0 8px;
+}
+.wlabel--banner { background-color: #c8433a; font-size: 20px; }
+
+/* ------------------------------------------------------------------ start screen */
+
+.start {
+    background-color: #1a201f;
+    align-items: center;
+    justify-content: center;
+}
+
+.start__printer {
+    width: 820px;
+    height: 34px;
+    background-color: #2d3331;
+    border-radius: 10px 10px 4px 4px;
+    border-width: 2px;
+    border-color: #0f1211;
+    align-items: center;
+    justify-content: center;
+}
+
+.start__slot {
+    width: 700px;
+    height: 6px;
+    background-color: #050606;
+    border-radius: 3px;
+}
+
+.start__paper {
+    width: 680px;
+}
+
+.start__paper .receipt { padding: 18px 30px 22px 30px; }
+
+.start__logo {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 54px;
+    -unity-text-align: middle-center;
+    letter-spacing: 4px;
+    margin: 0;
+    padding: 0;
+    height: 56px;
+}
+
+.option {
+    flex-direction: column;
+    margin-top: 12px;
+    padding: 12px 16px 10px 16px;
+    background-color: #efe9da;
+    border-width: 1px;
+    border-color: #b9b2a1;
+    border-bottom-width: 5px;
+    border-bottom-color: #a39b86;
+    border-radius: 6px;
+    transition-duration: 0.06s;
+    transition-property: translate, border-bottom-width, background-color;
+}
+
+.option:hover { background-color: #f8f4ea; }
+.option:active { translate: 0 2px; border-bottom-width: 3px; }
+
+.option__head {
+    -unity-font-definition: resource("UI/Fonts/BarlowCondensed-Bold");
+    font-size: 30px;
+    margin: 0;
+    padding: 0;
+}
+
+.option__text {
+    font-size: 14px;
+    white-space: normal;
+    color: #4a463e;
+    margin: 0;
+    padding: 0;
+}
+
+.option__price {
+    -unity-font-definition: resource("UI/Fonts/VT323-Regular");
+    font-size: 26px;
+    color: #2f9e5e;
+}
+
+.sit-key {
+    margin-bottom: 10px;
+}
+
+.slip {
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    width: 400px;
+}

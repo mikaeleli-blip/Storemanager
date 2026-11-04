@@ -4,13 +4,17 @@ using UnityEngine;
 namespace StoreManager
 {
     /// <summary>
-    /// Grey-box IMGUI interface: top bar, alerts, message log, selection panels, build mode and the office
-    /// desk screens. To be replaced by UI Toolkit later.
+    /// The game's interface state and input (selection, alerts, notices, clicks in the world), plus the IMGUI
+    /// screens that haven't moved to UI Toolkit yet (office computer, build mode). When the UI Toolkit layer is
+    /// running (StoreUI, Toolkit = true) it draws the floor HUD, world labels and start screen instead.
     /// </summary>
     public partial class Hud : MonoBehaviour
     {
         public static bool PointerOverUI;
         public static Hud I;
+        /// <summary>Set by StoreUI: the UI Toolkit layer is up and draws the screens it has taken over.</summary>
+        public static bool Toolkit;
+        public static bool PointerOverToolkit;
 
         Store store;
         readonly List<Rect> rects = new List<Rect>();
@@ -41,6 +45,12 @@ namespace StoreManager
         static GUILayoutOption W(float w) { return GUILayout.Width(w); }
         static string Money(float v) { return Economy.Money(v); }
 
+        public List<string> Alerts { get { return alerts; } }
+        public string ToastText { get { return toast; } }
+        public float ToastLeft { get { return toastTime; } }
+        /// <summary>How far down the alerts reach (the fixture panel sits below them).</summary>
+        public float AlertsHeight { get { return alertsHeight; } set { alertsHeight = value; } }
+
         void Awake() { I = this; }
 
         void Start()
@@ -69,7 +79,9 @@ namespace StoreManager
             for (int i = 0; i < rects.Count; i++) if (rects[i].Contains(gm)) { over = true; break; }
             bool pc = store.Avatar.AtDesk && OnPC;
             if (pc) over = true;
-            PointerOverUI = over;
+            PointerOverUI = over || PointerOverToolkit;
+            toastTime -= Time.unscaledDeltaTime;
+            if (Selected != null && Selected.Leaving) Selected = null;
 
             if (GameInput.Down(GameKey.Escape)) HandleEscape();
             if (store.Avatar.AtDesk && !OnPC && !BuildMode.I.Active) BuildMode.I.Open();
@@ -242,20 +254,27 @@ namespace StoreManager
 
             if (store.Avatar.AtDesk && OnPC)
             {
+                if (Toolkit && !store.StartChosen) return;   // the start screen is UI Toolkit
                 if (PcVisible) DrawPC(sw, sh);
                 DrawToast(sw, sh);
                 return;
             }
 
-            DrawWorldLabels();
-            DrawTopBar(sw);
-            DrawAlerts(sw);
-            DrawLog(sh);
+            if (!Toolkit)
+            {
+                DrawWorldLabels();
+                DrawTopBar(sw);
+                DrawAlerts(sw);
+                DrawLog(sh);
+            }
             if (store.Avatar.AtDesk) DrawBuildView(sw, sh);
-            else DrawFloor(sw, sh);
+            else if (!Toolkit) DrawFloor(sw, sh);
             BuildMode.I.DrawFixturePanel(this, sw, sh, 48f + alertsHeight);
-            DrawSelection(sw, sh);
-            DrawToast(sw, sh);
+            if (!Toolkit)
+            {
+                DrawSelection(sw, sh);
+                DrawToast(sw, sh);
+            }
         }
 
         void Label3D(Camera cam, Vector3 world, string text, float width)
@@ -386,7 +405,6 @@ namespace StoreManager
         void DrawToast(float sw, float sh)
         {
             if (toastTime <= 0f) return;
-            if (Event.current.type == EventType.Repaint) toastTime -= Time.unscaledDeltaTime;
             var r = new Rect(sw * 0.5f - 260f, 44f, 520f, 30f);
             Panel(r);
             GUI.Label(r, toast, center);
@@ -415,7 +433,6 @@ namespace StoreManager
 
         void DrawSelection(float sw, float sh)
         {
-            if (Selected != null && Selected.Leaving) Selected = null;
             if (Selected != null) DrawEmployeePanel(Selected, sw, sh);
             else if (SelectedCustomer != null) DrawCustomerPanel(SelectedCustomer, sw, sh);
         }
@@ -484,10 +501,13 @@ namespace StoreManager
 
         void DrawBuildView(float sw, float sh)
         {
-            var hint = new Rect(576f, sh - 40f, Mathf.Max(300f, sw - 576f - 416f), 32f);
-            Panel(hint);
-            GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f),
-                "Build: pick a fixture, click to place, R rotates, right-click cancels. Click a shelf to choose its product.  WASD/Q/E/wheel: camera   Esc: back to the computer", small);
+            if (!Toolkit)
+            {
+                var hint = new Rect(576f, sh - 40f, Mathf.Max(300f, sw - 576f - 416f), 32f);
+                Panel(hint);
+                GUI.Label(new Rect(hint.x + 8f, hint.y + 6f, hint.width - 16f, 22f),
+                    "Build: pick a fixture, click to place, R rotates, right-click cancels. Click a shelf to choose its product.  WASD/Q/E/wheel: camera   Esc: back to the computer", small);
+            }
             BuildMode.I.DrawPalette(this, sw, sh);
         }
 
