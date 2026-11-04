@@ -9,6 +9,10 @@ along X, facing -Z.
 Every unit is modelled once in two versions: a detailed one for the front row (what you see) and a light
 one for the rows behind it, then copied into place. That keeps a full store cheap to draw.
 Items are the detailed unit on its own, centred on the origin, for baskets, carts and the checkout belt.
+
+The game shows exactly as many units as there are on the shelf: it builds each row from the unit meshes
+(U_<product>_<k>) and the slots recorded in LAYOUT (columns front to back, bottom to top), exported as
+StockLayout.txt. The Stock_* rows are only used for the Blender previews.
 """
 import math
 import random
@@ -132,6 +136,19 @@ def remove(objs):
 
 
 ITEMS = []   # Item_* objects made while building rows
+UNITS = []   # U_* unit meshes the game builds shelf rows from
+LAYOUT = {}  # product -> (unit mesh names, columns of (unit index, x, y, z, yaw))
+
+
+def units_for(product, srcs):
+    """Keep copies of the unit meshes as U_<product>_<k> for export; returns their names."""
+    base = 'U_' + product.replace(' ', '_') + '_'
+    names = []
+    for k, src in enumerate(srcs):
+        o = join([place(src, (0, 0, 0))], base + str(k))
+        UNITS.append(o)
+        names.append(o.name)
+    return names
 
 
 def keep_item(src, product):
@@ -150,15 +167,23 @@ def grid_row(name, product, unit, d, w, stack=1, step=0.0, cols=None, variants=1
     det = [make(unit, True, v) for v in range(variants)]
     lite = [make(unit, False, v) for v in range(variants)]
     tops = [make(top_unit, v) for v in range(variants)] if top_unit else None
+    srcs = det + lite + (tops or [])
+    names = units_for(product, srcs)
     xs, zs = deep(d, gap_d, cols), along(w, gap_w)
-    objs = []
-    for ix, x in enumerate(xs):
-        for iz, z in enumerate(zs):
-            v = (iz // group) % variants
+    objs, columns = [], []
+    for iz, z in enumerate(zs):
+        v = (iz // group) % variants
+        col = []
+        for ix, x in enumerate(xs):
             for k in range(stack):
                 top = k == stack - 1
-                src = det[v] if ix == 0 else (tops[v] if tops and top else lite[v])
-                objs.append(place(src, (x + jitter(jit), k * step, z + jitter(jit)), jitter(yaw_jit)))
+                si = v if ix == 0 else (2 * variants + v if tops and top else variants + v)
+                pos = (x + jitter(jit), k * step, z + jitter(jit))
+                yaw = jitter(yaw_jit)
+                objs.append(place(srcs[si], pos, yaw))
+                col.append((si,) + pos + (yaw,))
+        columns.append(col)
+    LAYOUT[product] = (names, columns)
     row = join(objs, name)
     keep_item(det[0], product)
     remove(det + lite + (tops or []))
@@ -169,12 +194,17 @@ def scatter_row(name, product, units, count, r, lift=1.6, seed=1):
     """A loose pile in a produce crate: copies of a few unit variants at random spots and heights."""
     random.seed(seed)
     srcs = [make(u, i) for i, u in enumerate(units)]
-    objs = []
+    names = units_for(product, srcs)
+    objs, slots = [], []
     for i in range(count):
         x = random.uniform(X0 + r, X1 - r)
         z = random.uniform(Z0 + r, Z1 - r)
         y = random.random() * r * lift
-        objs.append(place(srcs[i % len(srcs)], (x, y, z), random.uniform(0, 360)))
+        yaw = random.uniform(0, 360)
+        objs.append(place(srcs[i % len(srcs)], (x, y, z), yaw))
+        slots.append((i % len(srcs), x, y, z, yaw))
+    # A loose pile fills from the bottom up.
+    LAYOUT[product] = (names, [[sl] for sl in sorted(slots, key=lambda sl: sl[2])])
     row = join(objs, name)
     keep_item(srcs[0], product)
     remove(srcs)
@@ -442,17 +472,16 @@ def egg_carton(y, detail, top):
 
 
 def eggs_unit(detail, v):
-    for k in range(3):
-        egg_carton(k * 0.066, detail, detail and k == 2)
+    """One carton; the game stacks them three high."""
+    egg_carton(0.0, detail, detail)
 
 
 def eggs_top(v):
-    for k in range(3):
-        egg_carton(k * 0.066, False, k == 2)
+    egg_carton(0.0, False, True)
 
 
 def eggs():
-    return grid_row('Stock_Eggs', 'Eggs', eggs_unit, 0.115, 0.255, top_unit=eggs_top)
+    return grid_row('Stock_Eggs', 'Eggs', eggs_unit, 0.115, 0.255, top_unit=eggs_top, stack=3, step=0.066)
 
 
 def cheese_unit(detail, v):
@@ -481,19 +510,20 @@ def yogurt_cup(y, flavour, detail):
 
 
 def yogurt_unit(detail, v):
+    """One cup; the game stacks them two high."""
     yogurt_cup(0.0, YOGURT[v], detail)
-    yogurt_cup(0.08, YOGURT[v], detail)
 
 
 def yogurt():
-    return grid_row('Stock_Yogurt', 'Yogurt', yogurt_unit, 0.066, 0.066, variants=4, group=2, gap_w=0.004)
+    return grid_row('Stock_Yogurt', 'Yogurt', yogurt_unit, 0.066, 0.066, variants=4, group=2, gap_w=0.004,
+                    stack=2, step=0.08)
 
 
 def pizza_unit(detail, v):
-    for k in range(5):
-        box((0.27, 0.034, 0.27), (0, 0.017 + k * 0.036, 0), 'navy' if k % 2 else 'zing_dark')
-        box((0.272, 0.01, 0.272), (0, 0.02 + k * 0.036, 0), 'red')
-    top = 0.178
+    """One pizza box; the game stacks them."""
+    box((0.27, 0.034, 0.27), (0, 0.017, 0), 'navy' if v % 2 else 'zing_dark')
+    box((0.272, 0.01, 0.272), (0, 0.02, 0), 'red')
+    top = 0.034
     cyl(0.1, 0.003, (0, top + 0.0015, 0), 'pizza', verts=12)
     cyl(0.085, 0.004, (0, top + 0.002, 0), 'cheese', verts=12)
     for i in range(6):
@@ -506,7 +536,8 @@ def pizza_unit(detail, v):
 
 
 def frozen_pizza():
-    return grid_row('Stock_Frozen_Pizza', 'Frozen Pizza', pizza_unit, 0.28, 0.28, cols=1)
+    return grid_row('Stock_Frozen_Pizza', 'Frozen Pizza', pizza_unit, 0.28, 0.28, cols=1, stack=6, step=0.036,
+                    variants=2)
 
 
 ICE = ['pink', 'chocolate', 'cream', 'mint']
@@ -576,11 +607,16 @@ def lettuce_head(v):
 def lettuce():
     begin_rows = []
     src = [make(lettuce_head, 0), make(lettuce_head, 1)]
+    names = units_for('Lettuce', src)
     random.seed(7)
-    objs = []
-    for x in (0.15, 0.33):
+    objs, columns = [], {}
+    for x in (0.33, 0.15):
         for i, z in enumerate(along(0.15)):
-            objs.append(place(src[i % 2], (x + jitter(0.01), 0, z + jitter(0.01)), random.uniform(0, 90)))
+            pos = (x + jitter(0.01), 0, z + jitter(0.01))
+            yaw = random.uniform(0, 90)
+            objs.append(place(src[i % 2], pos, yaw))
+            columns.setdefault(i, []).append((i % 2,) + pos + (yaw,))
+    LAYOUT['Lettuce'] = (names, [columns[i] for i in sorted(columns)])
     row = join(objs, 'Stock_Lettuce')
     keep_item(src[0], 'Lettuce')
     remove(src)
@@ -600,11 +636,16 @@ def banana_bunch(v):
 
 def bananas():
     src = make(banana_bunch, 0)
-    objs = []
+    names = units_for('Bananas', [src])
+    objs, columns = [], {}
     random.seed(3)
-    for x in (0.15, 0.32):
-        for z in along(0.14):
-            objs.append(place(src, (x + jitter(0.01), 0, z), jitter(12)))
+    for x in (0.32, 0.15):
+        for i, z in enumerate(along(0.14)):
+            pos = (x + jitter(0.01), 0, z)
+            yaw = jitter(12)
+            objs.append(place(src, pos, yaw))
+            columns.setdefault(i, []).append((0,) + pos + (yaw,))
+    LAYOUT['Bananas'] = (names, [columns[i] for i in sorted(columns)])
     row = join(objs, 'Stock_Bananas')
     keep_item(src, 'Bananas')
     remove([src])

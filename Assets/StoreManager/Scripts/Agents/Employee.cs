@@ -880,7 +880,7 @@ namespace StoreManager
             // Expired cases in the back get scanned out instead of going on the shelf.
             Store.I.WriteOff(p, p.Back.RemoveExpired());
 
-            int n = Mathf.Min(capacity, Mathf.Min(f.Def.Capacity - f.Stock.FreshTotal, p.Back.Total));
+            int n = Mathf.Min(capacity, Mathf.Min(f.Capacity - f.Stock.FreshTotal, p.Back.Total));
             if (!f.Removed && f.Product == p && n > 0)
             {
                 p.Back.MoveTo(cart, n);
@@ -892,7 +892,7 @@ namespace StoreManager
                 {
                     // Facing the shelf: anything out of date comes off.
                     Store.I.WriteOff(p, f.Stock.RemoveExpired());
-                    int fit = Mathf.Max(0, f.Def.Capacity - f.Stock.Total);
+                    int fit = Mathf.Max(0, f.Capacity - f.Stock.Total);
                     curOutput += cart.MoveTo(f.Stock, Mathf.Min(fit, cart.Total));
                 }
                 if (cart.Total > 0) cart.MoveTo(p.Back, cart.Total);
@@ -962,19 +962,26 @@ namespace StoreManager
             }
         }
 
+        /// <summary>
+        /// The bakery shelf most in need of a batch. Bakers bake for the day's trade, not to fill the whole
+        /// display: they top a shelf up to about 25 of a product (fresh bread goes stale fast).
+        /// </summary>
         Fixture FindBakeryShelf()
         {
             Fixture best = null;
-            float bestFill = 0.7f;
+            float bestFill = 1f;
             var all = Store.I.Fixtures;
             for (int i = 0; i < all.Count; i++)
             {
                 var f = all[i];
                 if (!f.IsBakeryShelf || f.Product == null || f.Removed || f.ClaimedBy != null) continue;
-                if (f.FreshFill < bestFill) { bestFill = f.FreshFill; best = f; }
+                float fill = f.Stock.FreshTotal / (BakeTarget(f) / 0.7f);
+                if (fill < 0.7f && fill < bestFill) { bestFill = fill; best = f; }
             }
             return best;
         }
+
+        static float BakeTarget(Fixture f) { return Mathf.Min(f.Capacity, f.Def.Capacity) * 0.7f; }
 
         IEnumerator BakerLoop()
         {
@@ -1014,7 +1021,7 @@ namespace StoreManager
                     if (!shelf.Removed && shelf.Product == p)
                     {
                         Store.I.WriteOff(p, shelf.Stock.RemoveExpired());
-                        curOutput += cart.MoveTo(shelf.Stock, Mathf.Min(cart.Total, Mathf.Max(0, shelf.Def.Capacity - shelf.Stock.Total)));
+                        curOutput += cart.MoveTo(shelf.Stock, Mathf.Min(cart.Total, Mathf.Max(0, shelf.Capacity - shelf.Stock.Total)));
                     }
                     cart.Clear();
                     cartProduct = null;

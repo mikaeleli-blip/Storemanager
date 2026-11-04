@@ -159,7 +159,8 @@ namespace StoreManager.EditorTools
             mi.importLights = false;
             mi.importBlendShapes = false;
             mi.animationType = ModelImporterAnimationType.None;
-            mi.isReadable = false;
+            // Shelf rows are merged from the product units at runtime, which needs their vertex data.
+            mi.isReadable = assetPath.EndsWith("Products.fbx");
             mi.meshCompression = ModelImporterMeshCompression.Off;
             mi.importNormals = ModelImporterNormals.Import;
             mi.addCollider = false;

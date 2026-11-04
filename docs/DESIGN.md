@@ -141,6 +141,14 @@ floor is placed by you, from the **office desk** (Build tab):
 - **Each shelf unit holds one product, chosen by you.** Click a shelf to pick
   it from the products its type allows. Changing or clearing a shelf sends its
   stock back to the back room.
+- **What you see is what's there:** every unit on a shelf is drawn, so one
+  item looks like one item. How many fit depends on the product's size: a
+  2 m gondola holds about 350 pasta bags but 48 toilet-paper packs, a fridge
+  700 cartons of milk, a chest freezer 72 pizzas (`Sim/ShelfRows.cs`, made by
+  the Blender build from the same shelf layouts the game draws). Bakers still
+  bake for the day (about 25 of a product per shelf), not to fill the display.
+- Suggested order levels keep long-life products at least half a shelf deep,
+  so shelves don't look bare; perishables are ordered by expected sales only.
 - Fixtures can be **moved** (keeps its product and stock) or **sold** for 50%.
 - Customers go to the fixtures holding what's on their list. Products with no
   shelf count as "things you don't sell".

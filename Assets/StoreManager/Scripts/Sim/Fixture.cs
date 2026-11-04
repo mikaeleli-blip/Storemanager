@@ -30,8 +30,9 @@ namespace StoreManager
 
         // Visuals
         public Transform Root;
-        public readonly List<GameObject> Rows = new List<GameObject>();
-        int rowsShown = -1;
+        public readonly List<GameObject> Rows = new List<GameObject>();      // counters, grey-box
+        public readonly List<StockRow> UnitRows = new List<StockRow>();    // shelves with models
+        int rowsShown = -1, unitsShown = -1;
 
         public Fixture(FixtureDef def, int id)
         {
@@ -45,9 +46,25 @@ namespace StoreManager
         public bool IsCheckout { get { return Def.Kind == FixtureKind.Checkout; } }
         public bool HoldsProducts { get { return IsShelf || IsCounter; } }
         public bool IsBakeryShelf { get { return Def.Id == "bakery_shelf"; } }
-        public float Fill { get { return Def.Capacity > 0 ? Mathf.Clamp01(Stock.Total / (float)Def.Capacity) : 0f; } }
+        /// <summary>
+        /// How many units fit. Every unit on a shelf is visible, so it depends on the product's size:
+        /// units per shelf row (ShelfRows, from the Blender layouts) x rows. Counters use the fixture's number.
+        /// </summary>
+        public int Capacity
+        {
+            get
+            {
+                if (IsShelf && Product != null)
+                {
+                    int per = ShelfRows.For(Product.Def.Name);
+                    if (per > 0) return per * Def.ShelfRowCount;
+                }
+                return Def.Capacity;
+            }
+        }
+        public float Fill { get { int c = Capacity; return c > 0 ? Mathf.Clamp01(Stock.Total / (float)c) : 0f; } }
         /// <summary>Fill counting only in-date stock.</summary>
-        public float FreshFill { get { return Def.Capacity > 0 ? Mathf.Clamp01(Stock.FreshTotal / (float)Def.Capacity) : 0f; } }
+        public float FreshFill { get { int c = Capacity; return c > 0 ? Mathf.Clamp01(Stock.FreshTotal / (float)c) : 0f; } }
         public Vector3 Center { get { return Placement.Point(Def, Origin, Rot, Def.W * 0.5f, Def.D * 0.5f); } }
 
         public string Label
@@ -105,6 +122,16 @@ namespace StoreManager
 
         public void UpdateVisuals()
         {
+            if (UnitRows.Count > 0)
+            {
+                // One unit on the shelf = one unit you can see, spread evenly over the rows.
+                int total = Stock.Total;
+                if (total == unitsShown) return;
+                unitsShown = total;
+                int rows = UnitRows.Count, each = total / rows, extra = total % rows;
+                for (int i = 0; i < rows; i++) UnitRows[i].Show(each + (i < extra ? 1 : 0));
+                return;
+            }
             int n = Rows.Count;
             if (n == 0) return;
             int want = Stock.Total <= 0 ? 0 : Mathf.Clamp(Mathf.CeilToInt(Fill * n), 1, n);
@@ -114,7 +141,15 @@ namespace StoreManager
             rowsShown = want;
         }
 
-        public void ResetVisuals() { rowsShown = -1; }
+        public void ResetVisuals() { rowsShown = -1; unitsShown = -1; }
+
+        public void ClearVisuals()
+        {
+            for (int i = 0; i < UnitRows.Count; i++) UnitRows[i].Dispose();
+            UnitRows.Clear();
+            Rows.Clear();
+            ResetVisuals();
+        }
     }
 
     public class CheckoutLane

@@ -285,7 +285,10 @@ namespace StoreManager
             int from = p.Def.Supplier != null ? NextDelivery(p.Def.Supplier) : Clock.Day + 1;
             float weight = 0f;
             for (int k = 0; k < days; k++) weight += DayFactor[(from - 1 + k) % 7];
-            return Mathf.Max(cs * 2, Mathf.CeilToInt(daily * weight / cs) * cs);
+            int par = Mathf.Max(cs * 2, Mathf.CeilToInt(daily * weight / cs) * cs);
+            // Things that keep for a month or more: enough to keep the shelves at least half full.
+            if (p.Life < 0 || p.Life >= 30) par = Mathf.Max(par, Mathf.CeilToInt(p.ShelfCap * 0.5f / cs) * cs);
+            return par;
         }
 
         public Product ProductOf(ProductDef def)
@@ -643,8 +646,9 @@ namespace StoreManager
             f.Product = def != null ? ProductOf(def) : null;
             if (f.Product != null)
             {
-                if (f.Product.Fixtures.Count == 0 && !f.Product.Baked) f.Product.Par = SuggestedPar(f.Product);
+                bool first = f.Product.Fixtures.Count == 0;
                 f.Product.Fixtures.Add(f);
+                if (first && !f.Product.Baked) f.Product.Par = SuggestedPar(f.Product);
             }
             if (f.ClaimedBy != null) f.ClaimedBy.Restart();
             Builder.BuildStockRows(f);

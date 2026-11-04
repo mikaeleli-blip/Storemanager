@@ -120,8 +120,10 @@ namespace StoreManager
         public FixtureKind Kind;
         public int W, D;
         public float Cost;
-        public int Capacity;
+        public int Capacity;   // counters; shelves without a product. Shelves: see Fixture.Capacity
         public float[] Levels = new float[0];   // shelf heights for stock rows (both sides)
+        /// <summary>Stock rows on a shelf: every level on both sides of every segment.</summary>
+        public int ShelfRowCount { get { return Segments.Length * 2 * Levels.Length; } }
         public bool Tilted;                      // produce crates
         public Vector2[] Segments = new Vector2[0];   // model centres (local)
         public Vector2Int[] Access = new Vector2Int[0];

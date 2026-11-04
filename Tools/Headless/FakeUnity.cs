@@ -224,6 +224,7 @@ namespace UnityEngine
     public struct Matrix4x4
     {
         public static Matrix4x4 Scale(Vector3 v) { return new Matrix4x4(); }
+        public static Matrix4x4 TRS(Vector3 p, Quaternion q, Vector3 s) { return new Matrix4x4(); }
     }
 
     public struct Ray
@@ -440,7 +441,16 @@ namespace UnityEngine
     }
     public class MeshFilter : Component { public Mesh sharedMesh; }
     public struct Bounds { public Vector3 center, size; }
-    public class Mesh : Object { public Bounds bounds; public int subMeshCount = 1; }
+    public class Mesh : Object
+    {
+        public Bounds bounds; public int subMeshCount = 1;
+        public UnityEngine.Rendering.IndexFormat indexFormat;
+        public void Clear() { }
+        public void MarkDynamic() { }
+        public void CombineMeshes(CombineInstance[] parts, bool merge, bool useMatrices) { }
+    }
+    public struct CombineInstance { public Mesh mesh; public Matrix4x4 transform; }
+    public class TextAsset : Object { public string text = ""; }
     public enum FilterMode { Point, Bilinear, Trilinear }
     public class Texture : Object { public FilterMode filterMode; }
     public enum TextureWrapMode { Repeat, Clamp }
@@ -788,6 +798,7 @@ namespace UnityEngine
 
 namespace UnityEngine.Rendering
 {
+    public enum IndexFormat { UInt16, UInt32 }
     public enum AmbientMode { Skybox, Trilight, Flat, Custom }
     public enum BlendMode { Zero, One, DstColor, SrcColor, OneMinusDstColor, SrcAlpha, OneMinusSrcColor, DstAlpha, OneMinusDstAlpha, SrcAlphaSaturate, OneMinusSrcAlpha }
     public class VolumeParameter<T>

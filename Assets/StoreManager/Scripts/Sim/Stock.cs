@@ -201,7 +201,7 @@ namespace StoreManager
 
         public int ShelfCap
         {
-            get { int t = 0; for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Def.Capacity; return t; }
+            get { int t = 0; for (int i = 0; i < Fixtures.Count; i++) t += Fixtures[i].Capacity; return t; }
         }
 
         public float ShelfFill { get { int c = ShelfCap; return c > 0 ? Mathf.Clamp01(ShelfTotal / (float)c) : 0f; } }

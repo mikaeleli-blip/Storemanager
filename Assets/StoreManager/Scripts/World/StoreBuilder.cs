@@ -310,8 +310,7 @@ namespace StoreManager
             if (f.Root == null) return;
             var old = f.Root.Find("Stock");
             if (old != null) { old.name = "Stock (old)"; Object.Destroy(old.gameObject); }
-            f.Rows.Clear();
-            f.ResetVisuals();
+            f.ClearVisuals();
             if (f.Product == null || !f.HoldsProducts) return;
 
             var root = new GameObject("Stock").transform;
@@ -319,7 +318,29 @@ namespace StoreManager
             float yaw = Placement.Yaw(f.Rot);
             var def = f.Def;
 
-            if (Models)
+            var layout = Models && !f.IsCounter ? StockLayout.For(f.Product.Def.Name) : null;
+            if (layout != null)
+            {
+                // Shelves: rows built unit by unit, so what you see is what's on the shelf.
+                int seed = f.Id * 7919;
+                for (int s = 0; s < def.Segments.Length; s++)
+                {
+                    var p = Placement.Point(def, f.Origin, f.Rot, def.Segments[s].x, def.Segments[s].y);
+                    for (int side = 0; side < 2; side++)
+                        for (int l = 0; l < def.Levels.Length; l++)
+                        {
+                            var rot = Quaternion.Euler(0f, yaw + (side == 0 ? 0f : 180f), def.Tilted ? ProduceTilt : 0f);
+                            f.UnitRows.Add(new StockRow(root, new Vector3(p.x, def.Levels[l], p.z), rot, layout, seed++));
+                        }
+                }
+                var rr = new System.Random(f.Id * 31);
+                for (int i = f.UnitRows.Count - 1; i > 0; i--)
+                {
+                    int j = rr.Next(i + 1);
+                    var t = f.UnitRows[i]; f.UnitRows[i] = f.UnitRows[j]; f.UnitRows[j] = t;
+                }
+            }
+            else if (Models)
             {
                 string mesh = ModelLibrary.StockMesh(f.Product.Def, f.IsCounter);
                 for (int s = 0; s < def.Segments.Length; s++)
@@ -367,7 +388,7 @@ namespace StoreManager
         {
             if (f.Root != null) Object.Destroy(f.Root.gameObject);
             f.Root = null;
-            f.Rows.Clear();
+            f.ClearVisuals();
         }
 
         /// <summary>A see-through preview of a fixture for build mode.</summary>

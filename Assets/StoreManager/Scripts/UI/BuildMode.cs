@@ -241,7 +241,7 @@ namespace StoreManager
                 else
                 {
                     var p = f.Product;
-                    GUILayout.Label("<b>" + p.Name + "</b>   on the shelf " + f.Stock.Total + " / " + f.Def.Capacity, hud.Rich);
+                    GUILayout.Label("<b>" + p.Name + "</b>   on the shelf " + f.Stock.Total + " / " + f.Capacity, hud.Rich);
                     if (p.Baked) GUILayout.Label("Baked by bakers at an oven.", hud.Small);
                     else GUILayout.Label("In the back room " + p.Back.Total + ", on the way " + p.Incoming + ".  Sold today " + p.SoldToday + ".", hud.Small);
                 }

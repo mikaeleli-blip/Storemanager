@@ -167,6 +167,20 @@ namespace StoreManager
             return characterParts.TryGetValue(part, out list) ? list : null;
         }
 
+        public static Mesh GetMesh(string name)
+        {
+            Load();
+            Mesh m;
+            return meshes.TryGetValue(name, out m) ? m : null;
+        }
+
+        /// <summary>Placement of one model inside a merged mesh, with the same import fix-ups Spawn uses.</summary>
+        public static Matrix4x4 UnitMatrix(Vector3 position, float yaw)
+        {
+            Load();
+            return Matrix4x4.TRS(position, Quaternion.Euler(0f, yaw, 0f) * fixRotation, fixScale);
+        }
+
         public static bool Has(string name)
         {
             Load();
