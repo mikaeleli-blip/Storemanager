@@ -203,10 +203,15 @@ namespace StoreManager
         {
             if (Opened) return;
             Opened = true;
-            OpenedDay = Clock.Day;
+            // Opening after closing time means the first real day is tomorrow.
+            OpenedDay = Clock.Hour >= GameClock.CloseHour ? Clock.Day + 1 : Clock.Day;
             Economy.PayRent(Rent);
-            if (Staff.All.Count > 0 || Lanes.Count > 0)
-                Message(Clock.IsOpen ? "Grand opening! The doors are open." : "Grand opening! The doors open at " + GameClock.OpenHour.ToString("00") + ":00.");
+            PutUpOpeningDecor();
+            if (Clock.IsOpen)
+                Message("You flip the sign to OPEN. It's not a big shop, but it's yours. A few curious neighbours are already at the door.");
+            else
+                Message("The balloons are up and the banner says NOW OPEN. The doors open at " + GameClock.OpenHour.ToString("00") + ":00"
+                    + (OpenedDay > Clock.Day ? " tomorrow" : "") + ". Expect a few curious neighbours.");
         }
 
         void Start()
@@ -331,7 +336,7 @@ namespace StoreManager
         {
             if (!IsOpenNow) return;
             if (Clock.Hour == GameClock.CloseHour - 1 && Clock.Minute % 60f > 40f) return;
-            float perSecond = HourWeight[Clock.Hour] * BaseTraffic * TrafficFactor * DayFactor[(Clock.Day - 1) % 7];
+            float perSecond = HourWeight[Clock.Hour] * BaseTraffic * TrafficFactor * DayFactor[(Clock.Day - 1) % 7] * OpeningBoost;
             spawnAcc += perSecond * Time.deltaTime;
             while (spawnAcc >= 1f)
             {
@@ -426,7 +431,13 @@ namespace StoreManager
 
             var done = Economy.CloseDay(Clock.Day);
             if (done.Customers > 0)
-                Reputation = Mathf.Clamp(Reputation + (Mathf.Clamp(done.AvgSatisfaction, 0f, 100f) - Reputation) * 0.2f, 0f, 100f);
+            {
+                // First impressions count double.
+                float weight = Opened && done.Day == OpenedDay ? 0.4f : 0.2f;
+                Reputation = Mathf.Clamp(Reputation + (Mathf.Clamp(done.AvgSatisfaction, 0f, 100f) - Reputation) * weight, 0f, 100f);
+            }
+            if (Opened && done.Day == OpenedDay) LocalPaper(done);
+            if (Opened && Clock.Day == OpenedDay + OpeningDays) TakeDownOpeningDecor();
             Message("Day " + done.Day + " done: sales " + Economy.Money(done.Sales) + ", profit " + Economy.Money(done.Profit)
                 + ", " + done.Customers + " customers, satisfaction " + done.AvgSatisfaction.ToString("0") + ".");
 

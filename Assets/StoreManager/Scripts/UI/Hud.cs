@@ -303,6 +303,7 @@ namespace StoreManager
             }
             else
             {
+                if (store.InOpeningWeek) Label3D(cam, store.BannerPoint, "<color=#c8433a>NOW OPEN</color>", 160f);
                 for (int i = 0; i < store.Lanes.Count; i++)
                     Label3D(cam, store.Lanes[i].Fixture.Center + new Vector3(0f, 2.6f, 0f), (i + 1).ToString(), 30f);
             }

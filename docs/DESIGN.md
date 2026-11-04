@@ -75,6 +75,11 @@ a new game):
   take a few days. More people apply before the grand opening (12 instead of 8).
 - **Start with a small crew**: two full-time cashiers, a weekday stocker and
   two weekend part-timers already work there; the store is open from day one.
+- **Opening day** is modest, it's a corner shop: a hand-painted NOW OPEN banner
+  on two poles, a few balloons and a chalkboard sign (taken down after three
+  days). Curious neighbours: +40% customers on opening day, +20% the day after,
+  +10% the third day. First impressions count double for reputation, and the
+  next morning the local paper writes a few lines about how it went.
 
 ## Progression: levels and licences
 

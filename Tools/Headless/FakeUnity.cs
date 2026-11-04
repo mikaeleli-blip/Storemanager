@@ -124,6 +124,7 @@ namespace UnityEngine
         public float x, y, z, w;
         public Quaternion(float x, float y, float z, float w) { this.x = x; this.y = y; this.z = z; this.w = w; }
         public static Quaternion identity { get { return new Quaternion(0, 0, 0, 1); } }
+        public static Quaternion FromToRotation(Vector3 a, Vector3 b) { return identity; }
         public static Quaternion Slerp(Quaternion a, Quaternion b, float t)
         {
             t = Mathf.Clamp01(t);
