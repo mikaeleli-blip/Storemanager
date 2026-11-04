@@ -10,6 +10,10 @@ namespace StoreManager
         public string DisplayName = "";
         public float BaseSpeed = 2f;
         public Renderer Body;
+        public CharacterRig Rig;
+
+        /// <summary>What the arms are doing when standing still (the rig animates it).</summary>
+        public virtual Pose CurrentPose { get { return Pose.Idle; } }
 
         List<Vector3> path;
         int pathIndex;
@@ -124,6 +128,22 @@ namespace StoreManager
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.0001f) return;
             transform.rotation = Quaternion.LookRotation(dir);
+        }
+
+        /// <summary>
+        /// Puts the Blender-made person together (Characters.fbx), or changes their clothes.
+        /// Without the models (headless tests) it falls back to the grey-box capsule.
+        /// </summary>
+        public void Dress(Outfit look, Hold hold)
+        {
+            if (CharacterRig.Available)
+            {
+                if (Rig == null) Rig = CharacterRig.Build(this, look, hold);
+                else Rig.Rebuild(look, hold);
+                return;
+            }
+            if (Body == null) BuildBody(look.Top, look.Skin, look.Height - 0.15f);
+            else Body.sharedMaterial = Mats.Get(look.Top);
         }
 
         /// <summary>Capsule body, head and a small nose so facing is visible.</summary>

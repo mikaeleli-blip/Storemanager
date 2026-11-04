@@ -59,12 +59,6 @@ namespace StoreManager
             0.5f, 0.6f, 0.7f, 0.9f, 1.2f, 1.0f, 0.8f, 0.9f, 1.1f, 1.4f, 1.4f, 1.1f, 0.8f, 0.5f,
             0f, 0f
         };
-        static readonly Color[] SkinTones =
-        {
-            new Color(0.96f, 0.84f, 0.72f), new Color(0.9f, 0.74f, 0.6f), new Color(0.78f, 0.6f, 0.45f),
-            new Color(0.6f, 0.43f, 0.3f), new Color(0.42f, 0.29f, 0.2f), new Color(0.98f, 0.88f, 0.8f)
-        };
-
         public int Expansions { get { return SlotCount - Layout.StartSlots; } }
         public int BackCapacity { get { return 5000 + 2000 * Expansions; } }
         public float Rent { get { return 350f + 175f * Expansions; } }
@@ -224,7 +218,7 @@ namespace StoreManager
             var go = new GameObject("Manager (You)");
             Avatar = go.AddComponent<ManagerAvatar>();
             Avatar.DisplayName = "You";
-            Avatar.BuildBody(new Color(0.12f, 0.12f, 0.16f), SkinTones[1], 1.75f);
+            Avatar.Dress(Outfit.Manager(), Hold.None);
             var tag = Mats.Prim(PrimitiveType.Cube, "Manager Marker", go.transform, Vector3.zero,
                 new Vector3(0.3f, 0.3f, 0.3f), new Color(1f, 0.85f, 0.1f), false);
             tag.transform.localPosition = new Vector3(0f, 2.45f, 0f);
@@ -349,8 +343,6 @@ namespace StoreManager
         {
             var go = new GameObject("Customer");
             var c = go.AddComponent<Customer>();
-            Color col = Color.HSVToRGB(Random.value, Random.Range(0.25f, 0.55f), Random.Range(0.45f, 0.85f));
-            c.BuildBody(col, SkinTones[Random.Range(0, SkinTones.Length)], Random.Range(1.5f, 1.8f));
             c.Teleport(RandomStreetTile());
             Customers.Add(c);
             c.Begin();

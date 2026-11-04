@@ -12,6 +12,8 @@ namespace StoreManager
         protected override bool StaffAccess { get { return true; } }
         public override float MoveSpeed { get { return 4.2f; } }
 
+        public override Pose CurrentPose { get { return AtDesk ? Pose.Sit : Pose.Idle; } }
+
         public bool InOffice { get { return Store.I.Grid.ZoneAt(Tile) == Zone.Office; } }
 
         protected override void Update()

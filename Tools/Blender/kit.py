@@ -267,6 +267,10 @@ def finish(name):
     if len(parts) > 1:
         bpy.ops.object.join()
     o = bpy.context.active_object
+    # Origin back at (0, 0, 0) so the mesh keeps the coordinates it was modelled in (base on y = 0).
+    # Without this the origin sits at the first part's centre and the game drops the model by that much.
+    o.select_set(True)
+    bpy.ops.object.transform_apply(location=True, rotation=False, scale=False)
     o.name = name
     o.data.name = name
     # flat shading

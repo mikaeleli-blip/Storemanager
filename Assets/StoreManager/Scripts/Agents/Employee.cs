@@ -236,9 +236,23 @@ namespace StoreManager
             }
         }
 
+        /// <summary>Puts them in their role's uniform (after hiring, a role change or a promotion).</summary>
         public void RefreshColor()
         {
-            if (Body != null) Body.sharedMaterial = Mats.Get(RoleColor(Role));
+            Dress(Outfit.Staff(Role, Names.IsFemale(DisplayName), Outfit.Seed(DisplayName), Rank != Rank.Staff), Hold.None);
+        }
+
+        public override Pose CurrentPose
+        {
+            get
+            {
+                if (!OnShift) return Pose.Idle;
+                if (Slacking) return SlackWhat == SlackKinds[0] ? Pose.Phone : Pose.Idle;
+                if (OnBreak || idle) return Pose.Idle;
+                if (Role == Role.Cashier) return AtPost ? Pose.Scan : Pose.Idle;
+                if (Role == Role.AssistantManager) return Pose.Idle;
+                return Pose.Work;
+            }
         }
 
         // ------------------------------------------------------------------ shifts

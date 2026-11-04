@@ -7,6 +7,7 @@ Exports go to Assets/StoreManager/Resources/Models/:
     Fixtures.fbx  shelves, fridges, counters, checkouts, walls, signs
     Products.fbx  stock rows (one shelf level of one product)
     Decor.fbx     back room, office, lobby and outdoor props
+    Characters.fbx  body parts, hair, uniforms and carried things for customers, staff and you
     palette.png / palette_e.png  colour + emission palette
 """
 import os
@@ -20,6 +21,8 @@ import kit  # noqa: E402
 import palette  # noqa: E402,F401  (fills the palette)
 import products  # noqa: E402
 import fixtures  # noqa: E402
+import characters  # noqa: E402
+import people  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -29,7 +32,7 @@ PREVIEW = os.path.join(HERE, 'previews')
 
 def build_all(only=None):
     kit.reset()
-    made = {'products': [], 'fixtures': [], 'decor': []}
+    made = {'products': [], 'fixtures': [], 'decor': [], 'characters': []}
 
     def run(group, fn, *args):
         o = fn(*args)
@@ -37,6 +40,11 @@ def build_all(only=None):
         o.location = (0, 0, -100)   # park out of the preview scene
         return o
 
+    for o in characters.build():
+        o.location = (0, 0, -100)
+        made['characters'].append(o)
+    if ONLY_CHARACTERS:
+        return made
     products.ITEMS.clear()
     for fn in products.ALL:
         run('products', fn)
@@ -209,7 +217,10 @@ def export_all(made):
     kit.write_palette(os.path.join(OUT, 'palette.png'), os.path.join(OUT, 'palette_e.png'))
     pal = bpy.data.materials.new('Palette')
     glass = bpy.data.materials.new('Glass')
-    groups = (('products', 'Products.fbx'), ('fixtures', 'Fixtures.fbx'), ('decor', 'Decor.fbx'))
+    groups = (('products', 'Products.fbx'), ('fixtures', 'Fixtures.fbx'), ('decor', 'Decor.fbx'),
+              ('characters', 'Characters.fbx'))
+    if ONLY_CHARACTERS:
+        groups = groups[3:]
     if ONLY_PRODUCTS:
         groups = groups[:1]
     if ONLY_FIXTURES:
@@ -225,14 +236,24 @@ def export_all(made):
 
 ONLY_PRODUCTS = False
 ONLY_FIXTURES = False
+ONLY_CHARACTERS = False
 
 if __name__ == '__main__':
     args = sys.argv[1:]
     ONLY_PRODUCTS = '--products-only' in args
     ONLY_FIXTURES = '--fixtures-only' in args
+    ONLY_CHARACTERS = '--characters-only' in args
     made = build_all()
     counts = {k: sum(len(o.data.polygons) for o in v) for k, v in made.items()}
     print('built', {k: len(v) for k, v in made.items()}, 'faces', counts)
+    if '--people' in args:
+        os.makedirs(PREVIEW, exist_ok=True)
+        people.render_lineup(PREVIEW)
+        made = build_all()
+    if '--people-store' in args:
+        os.makedirs(PREVIEW, exist_ok=True)
+        people.render_in_store(PREVIEW, preview_scene)
+        made = build_all()
     if '--cold' in args:
         render_cold()
         made = build_all()

@@ -23,6 +23,15 @@ namespace StoreManager
         {
             return First[UnityEngine.Random.Range(0, First.Length)] + " " + Last[UnityEngine.Random.Range(0, Last.Length)];
         }
+
+        /// <summary>The first names alternate female, male; used to pick hairstyles and beards.</summary>
+        public static bool IsFemale(string fullName)
+        {
+            int sp = fullName.IndexOf(' ');
+            string first = sp > 0 ? fullName.Substring(0, sp) : fullName;
+            int i = System.Array.IndexOf(First, first);
+            return i >= 0 ? i % 2 == 0 : (Outfit.Seed(fullName) & 1) == 0;
+        }
     }
 
     /// <summary>Roster, hiring, time clock, reviews, promotions and payroll.</summary>
@@ -306,7 +315,7 @@ namespace StoreManager
             DefaultWeek(e, main);
             e.Shift = ToShift(main);
             e.AddRecord(IncidentKind.Hired, "Hired as " + Catalog.RoleName(role) + " (" + (contract == Contract.FullTime ? "full-time" : "part-time") + ")");
-            e.BuildBody(Employee.RoleColor(role), new Color(0.93f, 0.78f, 0.65f), 1.6f);
+            e.RefreshColor();
             All.Add(e);
             Applicants.Remove(a);
 
@@ -449,6 +458,7 @@ namespace StoreManager
                 to = dept.Name + " Department Manager";
             }
             else { e.Role = Role.AssistantManager; e.AssignedCategory = null; e.Wage += AssistantRaise; to = "Assistant Manager"; e.RefreshColor(); e.Restart(); }
+            if (e.Role != Role.AssistantManager) e.RefreshColor();   // lanyard
             e.Morale = Mathf.Min(100f, e.Morale + 15f);
             e.PromotionWaitShifts = 0;
             e.AddRecord(IncidentKind.Promotion, "Promoted to " + to);
@@ -461,6 +471,7 @@ namespace StoreManager
             else if (e.Rank == Rank.DeptManager) { e.Rank = Rank.ShiftLead; e.Department = null; e.Wage -= DeptRaise; }
             else if (e.Rank == Rank.ShiftLead) { e.Rank = Rank.Staff; e.Wage -= LeadRaise; }
             else return "They're already at the bottom.";
+            e.RefreshColor();
             e.Morale = Mathf.Max(0f, e.Morale - 25f);
             e.AddRecord(IncidentKind.Demotion, "Demoted");
             return "You demoted " + e.DisplayName + ". They took it badly.";

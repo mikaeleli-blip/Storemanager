@@ -24,8 +24,8 @@ manager and grow the store.
 ## Platform and presentation
 
 - Unity 6 (6000.6.5f1), 3D top-down / isometric.
-- The current build is a **grey-box**: coloured primitives, procedural store
-  layout, IMGUI debug UI. Systems first, art later.
+- Stylized chunky low-poly models made by script in Blender (`Tools/Blender`):
+  fixtures, products, decor and people. IMGUI debug UI for now.
 - Store type: **supermarket**. Categories, products and fixtures are data
   (`Catalog.cs`), so other store types can be added without touching the
   simulation.
@@ -304,6 +304,27 @@ store (staff near them work 5% faster) and do the jobs you delegate:
   stock / not carried, prices, queue time, no open checkout, spills nearby,
   cashier service, and complaints being resolved.
 - Each night reputation moves towards the day's average satisfaction.
+- **Look:** every shopper is put together from body parts (`Characters.fbx`):
+  teens, adults and older people (about 15%, slower, some with a cane), all
+  builds and heights, many hairstyles, beards and glasses, tees, hoodies,
+  sweaters, jackets, coats and skirts. A list of 7+ items means a **trolley**,
+  otherwise a **basket**; what they pick shows up in it. After paying, basket
+  shoppers leave with a paper bag and trolley shoppers with bags in the trolley.
+
+### People (models and animation)
+
+- Parts are named `C_<Part>__<colour role>`; the game tints skin, hair, top,
+  bottom, shoes and accents per person and keeps the palette for details.
+- `CharacterRig` assembles hips, torso, head, arms and legs and animates them
+  in code: walking (legs, arm swing, bob), carrying a basket, pushing a
+  trolley, and poses — stocking/cleaning, scanning at the till, reaching for a
+  shelf, on the phone (slacking), sitting at the desk.
+- **Uniforms:** store polo in the role colour with logo and name badge.
+  Cashier blue; stocker grey polo with an orange hi-vis vest; cleaner teal;
+  baker cream polo, apron and baker's hat; deli white polo, striped maroon
+  apron and cap; assistant manager white shirt, purple tie and lanyard. You
+  wear a charcoal blazer, white shirt and red tie. Staff keep their look (it
+  comes from their name) and change uniform when their role changes.
 - The Overview screen shows **what upset customers today** (empty shelves,
   queues, prices, spills, things you don't sell...), so problems are traceable.
 
@@ -339,5 +360,5 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 4. Decor and signs you can place; drag-to-place rows of shelves.
 5. Self-checkouts, security/shoplifting, events (holidays, heat waves).
 6. Real UI (UI Toolkit) replacing the IMGUI debug HUD.
-7. Art pass: store interior, characters, animations.
+7. Art pass: lighting, more animation (skinned rigs), facial expressions.
 8. Save/load, difficulty and failure settings, more store types.

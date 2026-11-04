@@ -41,6 +41,8 @@ Assets/StoreManager/Scripts/
   UI/      IMGUI HUD, office screens, build mode
 Tools/Blender/   scripted low-poly models (build_models.py) and textures;
                  products.py: shelf rows (Stock_*, Deli_*) and single items (Item_*)
+                 characters.py: body parts, hair, uniforms, basket/trolley (C_*)
+                 people.py: preview lineup (--people), same layout as CharacterRig.cs
 Tools/Headless/  simulation harness (run.sh)
 ```
 

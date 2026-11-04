@@ -12,6 +12,8 @@ namespace StoreManager
     public static class ModelLibrary
     {
         static readonly Dictionary<string, Mesh> meshes = new Dictionary<string, Mesh>();
+        static readonly Dictionary<string, List<KeyValuePair<string, string>>> characterParts =
+            new Dictionary<string, List<KeyValuePair<string, string>>>();
         static bool loaded;
         static Material palette, glass;
         static Quaternion fixRotation = Quaternion.identity;
@@ -24,7 +26,7 @@ namespace StoreManager
         {
             if (loaded) return;
             loaded = true;
-            string[] files = { "Models/Fixtures", "Models/Products", "Models/Decor" };
+            string[] files = { "Models/Fixtures", "Models/Products", "Models/Decor", "Models/Characters" };
             for (int f = 0; f < files.Length; f++)
             {
                 var root = Resources.Load<GameObject>(files[f]);
@@ -34,6 +36,7 @@ namespace StoreManager
                     if (filters[i].sharedMesh != null) meshes[filters[i].gameObject.name] = filters[i].sharedMesh;
             }
             if (meshes.Count == 0) return;
+            IndexCharacterParts();
             BuildMaterials();
             Calibrate();
         }
@@ -139,6 +142,29 @@ namespace StoreManager
                 }
             }
             if (fixScale != Vector3.one) Debug.LogWarning("[Storemanager] Model scale corrected by " + fixScale);
+        }
+
+        /// <summary>People are built from C_Part__role meshes; this groups them by part.</summary>
+        static void IndexCharacterParts()
+        {
+            foreach (var name in meshes.Keys)
+            {
+                if (!name.StartsWith("C_")) continue;
+                int cut = name.IndexOf("__");
+                if (cut < 0) continue;
+                string part = name.Substring(2, cut - 2), role = name.Substring(cut + 2);
+                List<KeyValuePair<string, string>> list;
+                if (!characterParts.TryGetValue(part, out list)) characterParts[part] = list = new List<KeyValuePair<string, string>>();
+                list.Add(new KeyValuePair<string, string>(name, role));
+            }
+        }
+
+        /// <summary>The meshes (name, colour role) that make up one character part, or null.</summary>
+        public static List<KeyValuePair<string, string>> CharacterPart(string part)
+        {
+            Load();
+            List<KeyValuePair<string, string>> list;
+            return characterParts.TryGetValue(part, out list) ? list : null;
         }
 
         public static bool Has(string name)

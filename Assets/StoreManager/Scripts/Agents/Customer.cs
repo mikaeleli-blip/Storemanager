@@ -37,7 +37,7 @@ namespace StoreManager
         public bool CounterServed;
         public Fixture AtFixture;
 
-        bool gaveUp;
+        bool gaveUp, reaching;
         float patience;
         float dirtTimer;
         GameObject marker;
@@ -49,6 +49,7 @@ namespace StoreManager
 
         public override float MoveSpeed { get { return HurryUp ? BaseSpeed * 1.3f : BaseSpeed; } }
         public int ListSize { get { return wants.Count; } }
+        public override Pose CurrentPose { get { return reaching ? Pose.Reach : Pose.Idle; } }
 
         public void Begin()
         {
@@ -66,6 +67,13 @@ namespace StoreManager
                 if (existing != null) existing.Qty += qty;
                 else wants.Add(new Want { Def = p, Qty = qty });
             }
+
+            // Big shops get a trolley, small ones a basket. Older shoppers walk slower, some with a cane.
+            int total = 0;
+            for (int i = 0; i < wants.Count; i++) total += wants[i].Qty;
+            var look = Outfit.Customer(Names.IsFemale(DisplayName));
+            if (look.Elderly) BaseSpeed *= 0.72f;
+            Dress(look, total >= 7 ? Hold.Trolley : Hold.Basket);
             StartCoroutine(Run());
         }
 
@@ -137,7 +145,11 @@ namespace StoreManager
 
                 Status = "Looking for " + product.Name;
                 yield return StartCoroutine(MoveTo(target.AccessTile(store.Grid)));
+                // Turn to the shelf (trolleys stay pointing down the aisle) and reach for it.
+                if (Rig == null || Rig.Holding != Hold.Trolley) Face(target.Center - transform.position);
+                reaching = true;
                 yield return StartCoroutine(Wait(Random.Range(1.5f, 3.5f)));
+                reaching = false;
                 if (target.Removed || target.Product != product)
                 {
                     var other = BestFixture(product, transform.position);
@@ -203,6 +215,7 @@ namespace StoreManager
             int got = p.Life > 0 && !f.IsCounter && Random.value < 0.25f ? f.Stock.TakeNewest(qty) : f.Stock.TakeFresh(qty);
             if (got < qty) Lose("Empty shelves", 2f);
             Items += got;
+            if (Rig != null) for (int i = 0; i < got; i++) Rig.AddItem(p.Def);
             float value = got * p.Price;
             CartValue += value;
             float cur;
@@ -398,6 +411,7 @@ namespace StoreManager
             Lane = null;
             AtServiceSpot = false;
             Status = "Paid";
+            if (Rig != null) Rig.PackBags();
         }
 
         /// <summary>Walks out without paying; the cart goes back on the shelves.</summary>
@@ -413,6 +427,7 @@ namespace StoreManager
             }
             picked.Clear();
             categoryValue.Clear();
+            if (Rig != null) Rig.ClearItems();
             Items = 0;
             CartValue = 0f;
             Lose("Walked out", 20f);

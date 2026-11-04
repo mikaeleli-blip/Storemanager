@@ -28,6 +28,8 @@ namespace UnityEngine
     public static class Mathf
     {
         public const float PI = 3.14159265f;
+        public const float Rad2Deg = 57.29578f, Deg2Rad = 0.01745329f;
+        public static float Acos(float v) { return (float)Math.Acos(v); }
         public static float Clamp(float v, float a, float b) { return v < a ? a : v > b ? b : v; }
         public static int Clamp(int v, int a, int b) { return v < a ? a : v > b ? b : v; }
         public static float Clamp01(float v) { return Clamp(v, 0f, 1f); }
@@ -124,6 +126,7 @@ namespace UnityEngine
         public float x, y, z, w;
         public Quaternion(float x, float y, float z, float w) { this.x = x; this.y = y; this.z = z; this.w = w; }
         public static Quaternion identity { get { return new Quaternion(0, 0, 0, 1); } }
+        public static Quaternion Inverse(Quaternion q) { return new Quaternion(-q.x, -q.y, -q.z, q.w); }
         public static Quaternion FromToRotation(Vector3 a, Vector3 b) { return identity; }
         public static Quaternion Slerp(Quaternion a, Quaternion b, float t)
         {
@@ -463,6 +466,7 @@ namespace UnityEngine
     public class MeshRenderer : Renderer { }
     public class Collider : Component { }
     public class BoxCollider : Collider { }
+    public class CapsuleCollider : Collider { public float radius, height; public Vector3 center; }
     public class AudioListener : Behaviour { }
 
     public class Light : Behaviour
