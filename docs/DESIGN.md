@@ -62,6 +62,20 @@ manager and grow the store.
 - Esc on the computer closes the front window. **Tab** gets up and walks the
   floor.
 
+## Starting a game
+
+The office computer asks how to start (no save system yet, so every launch is
+a new game):
+
+- **Hire your own team** (recommended): nobody works there yet. Interview and
+  hire everyone, set up the roster, build and stock the shop, then press
+  **Open the store** (desktop checklist: a checkout, products on shelves,
+  stock ordered, a cashier hired). Until then no customers come and no rent is
+  charged, but the clock can run, so interviews, references and deliveries can
+  take a few days. More people apply before the grand opening (12 instead of 8).
+- **Start with a small crew**: two full-time cashiers, a weekday stocker and
+  two weekend part-timers already work there; the store is open from day one.
+
 ## Progression: levels and licences
 
 - Every customer who pays earns **XP** (2 + 1 per $5 in their basket). XP
@@ -197,9 +211,9 @@ floor is placed by you, from the **office desk** (Build tab):
   stocker). Fridays and Saturdays are busier.
 - **Call in** an off-duty employee from their profile when someone's sick
   (overtime if over contract; unhappy on a day off).
-- Starting crew: two full-time cashiers (weekday mornings and evenings), a
-  full-time weekday stocker and two part-time cashiers for Fri-Sun. Weekend
-  stocking is a gap to fill.
+- With the small-crew start: two full-time cashiers (weekday mornings and
+  evenings), a full-time weekday stocker and two part-time cashiers for
+  Fri-Sun. Weekend stocking is a gap to fill.
 
 ### Breaks and the time clock
 - Every shift has a 30-minute **break** in the office. Breaks are staggered:
@@ -296,8 +310,7 @@ store (staff near them work 5% faster) and do the jobs you delegate:
   example after clearing shelves into the back), every product gets a fair
   share and the rest goes back on the truck (not billed).
 - Rent is charged every midnight and grows with expansion.
-- Start with $20,000, a cashier for each shift and a morning stocker. Rent
-  $350/day. A starter shop (2 checkouts, 6 shelves) plus express opening stock
+- Start with $20,000. Rent $350/day from the day you open. A starter shop (2 checkouts, 6 shelves) plus express opening stock
   costs about $9k. In the headless auto-player run, sales grow from ~$3k a day
   to ~$13k a day by day 30, with level 12 around day 30–35 and the big
   departments (bakery, deli) bought as money allows.

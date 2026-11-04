@@ -491,7 +491,9 @@ namespace StoreManager
                 Applicants[i].Days++;
                 if (Applicants[i].Days > 4) Applicants.RemoveAt(i);
             }
-            while (Applicants.Count < 8) Applicants.Add(Applicant.Generate());
+            // Before the grand opening the job ad is fresh: more people apply.
+            int want = store.Opened ? 8 : 12;
+            while (Applicants.Count < want) Applicants.Add(Applicant.Generate());
         }
 
         /// <summary>The starting crew: two full-time cashiers and a stocker on weekdays, two part-timers at the weekend.</summary>

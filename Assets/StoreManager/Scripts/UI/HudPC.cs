@@ -244,6 +244,13 @@ namespace StoreManager
             GUI.DrawTexture(full, wallpaper);
             GUI.Label(new Rect(sw - 760f, sh - 150f, 400f, 90f), "StoreOS", watermark);
 
+            if (!store.StartChosen)
+            {
+                DrawNewGame(sw, sh);
+                GUI.color = Color.white;
+                return;
+            }
+
             DrawDesktopIcons();
             DrawWidgets(sw, sh);
             DrawTaskbar(sw, sh);
@@ -257,6 +264,69 @@ namespace StoreManager
                 w.Rect.y = Mathf.Clamp(w.Rect.y, 0f, sh - 44f - 30f);
             }
             GUI.color = Color.white;
+        }
+
+        void DrawNewGame(float sw, float sh)
+        {
+            var r = new Rect(sw * 0.5f - 400f, sh * 0.5f - 230f, 800f, 460f);
+            Card(r);
+            GUILayout.BeginArea(new Rect(r.x + 28f, r.y + 22f, r.width - 56f, r.height - 40f));
+            GUILayout.Label("<size=24><b>Welcome to your store</b></size>", rich);
+            GUILayout.Label("A small, empty corner shop. You're the manager: you never stock a shelf or run a till yourself. How do you want to start?", rich);
+            GUILayout.Space(16f);
+            if (GUILayout.Button("<size=17><b>Hire your own team</b></size>\nStart with nobody. Interview and hire every employee, set up the roster, build and stock the shop, "
+                + "then open the doors when you're ready. Rent starts the day you open.", cellStyleBig(), GUILayout.Height(110f)))
+                store.ChooseStart(true);
+            GUILayout.Space(12f);
+            if (GUILayout.Button("<size=17><b>Start with a small crew</b></size>\nFive people already work here: two full-time cashiers, a weekday stocker and two weekend part-timers. "
+                + "The store is open from day one.", cellStyleBig(), GUILayout.Height(110f)))
+                store.ChooseStart(false);
+            GUILayout.EndArea();
+        }
+
+        GUIStyle bigButton;
+        GUIStyle cellStyleBig()
+        {
+            if (bigButton == null)
+            {
+                bigButton = new GUIStyle(GUI.skin.button) { richText = true, wordWrap = true, alignment = TextAnchor.MiddleLeft, fontSize = 13 };
+                bigButton.padding = new RectOffset(18, 18, 10, 10);
+            }
+            return bigButton;
+        }
+
+        void DrawOpeningCard(Rect a)
+        {
+            Card(a);
+            GUILayout.BeginArea(new Rect(a.x + 12f, a.y + 8f, a.width - 24f, a.height - 12f));
+            var clk = store.Clock;
+            GUILayout.Label("BEFORE OPENING  ·  Day " + clk.Day + ", " + clk.Weekday + " " + clk.TimeText, cardTitle);
+            bool any = false, stock = false;
+            for (int i = 0; i < store.Products.Count; i++)
+            {
+                if (store.Products[i].Carried) any = true;
+                if (store.Products[i].OnHand > 0 || store.Products[i].Incoming > 0) stock = true;
+            }
+            int today = store.Staff.Today;
+            Check(store.Lanes.Count > 0, "A checkout placed (Build)");
+            Check(any, "Products on shelves (Build, click a shelf)");
+            Check(stock, "Stock ordered or in the store (Shop)");
+            Check(store.Staff.AnyScheduled(Role.Cashier), "A cashier hired (Hiring)");
+            Check(store.Staff.AnyScheduled(Role.Stocker), "A stocker hired <size=10>(recommended)</size>");
+            bool cover = store.Staff.Coverage(Role.Cashier, today, ShiftSlot.Morning) + store.Staff.Coverage(Role.Cashier, today, ShiftSlot.Evening) > 0
+                || store.Staff.Coverage(Role.Cashier, (today + 1) % 7, ShiftSlot.Morning) > 0;
+            Check(cover, "Cashiers on the roster for opening day <size=10>(Roster)</size>");
+            GUILayout.Label("Cash <b>" + Money(store.Economy.Cash) + "</b>   Staff " + store.Staff.All.Count, rich);
+            string why = store.OpenProblem();
+            GUI.enabled = why == null;
+            if (GUILayout.Button("Open the store", GUILayout.Height(30f))) store.OpenStore();
+            GUI.enabled = true;
+            GUILayout.EndArea();
+        }
+
+        void Check(bool ok, string text)
+        {
+            GUILayout.Label((ok ? "<color=#9dff9d>[x]</color> " : "<color=#ff9977>[ ]</color> ") + text, rich);
         }
 
         bool DesktopIcon(Rect cell, Texture2D icon, Color col, string label)
@@ -305,6 +375,13 @@ namespace StoreManager
             float x = sw - 352f, w = 336f;
 
             var a = new Rect(x, 16f, w, 228f);
+            if (!store.Opened)
+            {
+                a.height = 248f;
+                DrawOpeningCard(a);
+                DrawAlertCards(x, w, a.yMax);
+                return;
+            }
             Card(a);
             GUILayout.BeginArea(new Rect(a.x + 12f, a.y + 8f, a.width - 24f, a.height - 12f));
             GUILayout.Label("TODAY  ·  Day " + clk.Day + ", " + clk.Weekday + " " + clk.TimeText + "  "
@@ -326,8 +403,13 @@ namespace StoreManager
             GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), Texture2D.whiteTexture);
             GUI.color = new Color(1f, 1f, 1f, pcAlpha);
 
+            DrawAlertCards(x, w, a.yMax);
+        }
+
+        void DrawAlertCards(float x, float w, float top)
+        {
             float ah = Mathf.Clamp(36f + alerts.Count * 22f, 64f, 300f);
-            var b = new Rect(x, a.yMax + 10f, w, ah);
+            var b = new Rect(x, top + 10f, w, ah);
             Card(b);
             GUILayout.BeginArea(new Rect(b.x + 12f, b.y + 8f, b.width - 24f, b.height - 12f));
             GUILayout.Label("ALERTS", cardTitle);

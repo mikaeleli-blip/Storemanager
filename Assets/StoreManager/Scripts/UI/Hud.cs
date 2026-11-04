@@ -147,9 +147,10 @@ namespace StoreManager
                 alerts.Add("<color=#ff6655>! " + c.DisplayName + " wants the manager, " + left + " min left" + who + "</color>");
             }
 
+            if (!store.Opened && store.StartChosen) alerts.Add("<color=#9fd3ff>Not open yet. Open the store from the computer when you're ready.</color>");
             if (store.Lanes.Count == 0) alerts.Add("<color=#ff6655>No checkouts yet. Place some with the Build app.</color>");
-            else if (clk.IsOpen && store.OpenLaneCount == 0) alerts.Add("<color=#ff6655>No checkout is open!</color>");
-            else if (clk.IsOpen && store.QueuePressure()) alerts.Add("<color=#ffcc55>Long checkout queues.</color>");
+            else if (store.IsOpenNow && store.OpenLaneCount == 0) alerts.Add("<color=#ff6655>No checkout is open!</color>");
+            else if (store.IsOpenNow && store.QueuePressure()) alerts.Add("<color=#ffcc55>Long checkout queues.</color>");
 
             int emptyFixtures = 0, carried = 0;
             for (int i = 0; i < store.Fixtures.Count; i++)
@@ -339,7 +340,7 @@ namespace StoreManager
             GUILayout.BeginArea(new Rect(8f, 6f, sw - 16f, 26f));
             GUILayout.BeginHorizontal();
             GUILayout.Label("Day " + clk.Day + " (" + clk.Weekday + ")  " + clk.TimeText + "  "
-                + (clk.IsOpen ? "<color=#7dff8a>OPEN</color>" : "<color=#ff8a7d>CLOSED</color>"), bold, W(220));
+                + (!store.Opened ? "<color=#9fd3ff>NOT OPEN YET</color>" : clk.IsOpen ? "<color=#7dff8a>OPEN</color>" : "<color=#ff8a7d>CLOSED</color>"), bold, W(240));
             GUILayout.Label("Cash " + Money(store.Economy.Cash), bold, W(140));
             int rep = Mathf.RoundToInt(store.Reputation);
             GUILayout.Label("Reputation " + rep + "  " + new string('*', Mathf.Clamp(rep / 20 + 1, 1, 5)), bold, W(170));

@@ -24,6 +24,10 @@ public static class Runner
         store = Store.I;
         Engine.Tick(1f / 30f);   // Start(): sits at the desk, opens build mode
         overstock = args.Length > 3 && args[3] == "overstock";
+        GuiPass();   // the new-game screen
+        bool crew = args.Length > 3 && args[3] == "crew";
+        store.ChooseStart(!crew);
+        Console.WriteLine("   >> START: " + (crew ? "small crew, open from day one" : "hiring everyone, opening when ready"));
         if (overstock) { store.DateChecks = DateCheckPolicy.WhenRestocking; Console.WriteLine("   >> TEST: over-ordering x3, date checks only when restocking"); }
         if (scripted) BuildStarterStore();
         store.Clock.SetSpeed(3); // 4x
@@ -219,6 +223,11 @@ public static class Runner
     static void Script(int day, int hour, HashSet<string> done)
     {
         var s = store;
+        if (!s.Opened && s.OpenProblem() == null)
+        {
+            s.OpenStore();
+            Note("PLAYER: opened the store on day " + day + " at " + s.Clock.TimeText + " with " + s.Staff.All.Count + " staff");
+        }
         if (hour == 21)
         {
             foreach (var p in s.Products)
@@ -390,6 +399,7 @@ public static class Runner
             onGui.Invoke(hud, null);
             store.Avatar.SitDown();
             store.Cam.LockBlend = 1f;
+            onGui.Invoke(hud, null);   // desktop with widgets (and the opening checklist before opening)
             for (int t = 0; t < Hud.AppCount; t++) hud.OpenApp((Hud.App)t);
             onGui.Invoke(hud, null);
             var F = BindingFlags.NonPublic | BindingFlags.Instance;

@@ -9,9 +9,10 @@ and grow the store. See [docs/DESIGN.md](docs/DESIGN.md).
 1. Open the folder in Unity Hub (Unity **6000.6.5f1**).
 2. Open any scene (the empty default scene is fine) and press **Play**.
    The game builds itself at startup (`Bootstrap.cs`). You start at the
-   office computer with an empty corner shop and time paused: open **Build**,
-   place a checkout and shelves, pick products, buy stock in the **Shop** app
-   (express for day one), then press 1-4 to start the clock.
+   office computer with an empty corner shop and time paused, and choose to
+   hire your own team (open the store when ready) or start with a small crew.
+   Open **Build**, place a checkout and shelves, pick products, buy stock in
+   the **Shop** app (express for day one), then press 1-4 to start the clock.
    Sales earn XP; store levels and cash unlock licences (Licences tab) for
    new products, departments, staff roles and expansions.
 
@@ -48,5 +49,7 @@ Tools/Headless/  simulation harness (run.sh)
 against a small fake UnityEngine and simulates whole days without Unity,
 printing each day's ledger and what upset customers. Needs Mono. The
 `scripted` mode is an auto-player that buys licences, places fixtures, orders
-from suppliers, pays bills, hires and expands as money and levels allow. A 4th
-argument `overstock` makes it over-order with date checks off (expiry test).
+from suppliers, pays bills, hires and expands as money and levels allow. The
+auto-player hires everyone itself and opens when ready; a 4th argument `crew`
+uses the small-crew start, `overstock` makes it over-order with date checks off
+(expiry test).

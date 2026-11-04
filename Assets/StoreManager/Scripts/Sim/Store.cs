@@ -142,7 +142,6 @@ namespace StoreManager
 
             Builder.BuildAll();
             Staff.RefreshApplicants(true);
-            Staff.HireStartingStaff();
             SpawnAvatar();
             SetupCameraAndLight();
             gameObject.AddComponent<Hud>();
@@ -151,10 +150,63 @@ namespace StoreManager
             Clock.HourChanged += OnHour;
             Clock.NewDay += OnNewDay;
             Economy.Today.Day = Clock.Day;
+        }
+
+        // ------------------------------------------------------------------ new game and opening
+
+        /// <summary>True once you've picked how to start (on the office computer).</summary>
+        public bool StartChosen;
+        /// <summary>The doors are open for business (customers come during opening hours).</summary>
+        public bool Opened;
+        public int OpenedDay;
+        public bool IsOpenNow { get { return Opened && Clock.IsOpen; } }
+
+        /// <summary>freshTeam: no staff, the store opens when you say so. Otherwise a small crew and open from day one.</summary>
+        public void ChooseStart(bool freshTeam)
+        {
+            if (StartChosen) return;
+            StartChosen = true;
+            Message("Your corner shop is empty. You have a Basic Groceries licence: pasta, canned soup, two colas and snacks.");
+            if (freshTeam)
+            {
+                Staff.RefreshApplicants(true);
+                Message("You're hiring everyone yourself. Interview applicants in the Hiring app, set their days in Roster, build and stock the store, then press Open the store.");
+                Message("Time is paused. The clock can run before opening (no customers, no rent yet): interviews, references and deliveries take days.");
+            }
+            else
+            {
+                Staff.HireStartingStaff();
+                OpenStore();
+                Message("You have a small crew. Open the Build app to place a checkout and shelves, pick what goes on each shelf, then buy stock in the Shop app (express gets it here today).");
+                Message("Time is paused. Press 1-4 or the speed buttons when you're ready. Sales earn XP; levels unlock licences.");
+            }
+        }
+
+        /// <summary>What's missing before the doors can open, or null.</summary>
+        public string OpenProblem()
+        {
+            if (Opened) return "Already open.";
+            if (Lanes.Count == 0) return "Place at least one checkout (Build).";
+            bool any = false, stock = false;
+            for (int i = 0; i < Products.Count; i++)
+            {
+                if (Products[i].Carried) any = true;
+                if (Products[i].OnHand > 0 || Products[i].Incoming > 0) stock = true;
+            }
+            if (!any) return "Put at least one product on a shelf (Build, click a shelf).";
+            if (!stock) return "Order some stock (Shop).";
+            if (!Staff.AnyScheduled(Role.Cashier)) return "Hire at least one cashier (Hiring).";
+            return null;
+        }
+
+        public void OpenStore()
+        {
+            if (Opened) return;
+            Opened = true;
+            OpenedDay = Clock.Day;
             Economy.PayRent(Rent);
-            Message("Your corner shop is empty. You have a Basic Groceries licence: pasta, canned soup, soft drinks and snacks.");
-            Message("Open the Build app on your computer to place a checkout and shelves, pick what goes on each shelf, then buy stock in the Shop app (express gets it here today).");
-            Message("Time is paused. Press 1-4 or the speed buttons when you're ready to open. Sales earn XP; levels unlock licences.");
+            if (Staff.All.Count > 0 || Lanes.Count > 0)
+                Message(Clock.IsOpen ? "Grand opening! The doors are open." : "Grand opening! The doors open at " + GameClock.OpenHour.ToString("00") + ":00.");
         }
 
         void Start()
@@ -277,7 +329,7 @@ namespace StoreManager
 
         void SpawnCustomers()
         {
-            if (!Clock.IsOpen) return;
+            if (!IsOpenNow) return;
             if (Clock.Hour == GameClock.CloseHour - 1 && Clock.Minute % 60f > 40f) return;
             float perSecond = HourWeight[Clock.Hour] * BaseTraffic * TrafficFactor * DayFactor[(Clock.Day - 1) % 7];
             spawnAcc += perSecond * Time.deltaTime;
@@ -380,7 +432,7 @@ namespace StoreManager
 
             for (int i = 0; i < Products.Count; i++) Products[i].ResetDaily();
             for (int i = 0; i < Categories.Count; i++) Categories[i].SalesToday = 0f;
-            Economy.PayRent(Rent);
+            if (Opened) Economy.PayRent(Rent);
             BillsNightly();
             Staff.RefreshApplicants(false);
             if (Economy.Cash < 0f) Message("Warning: the store is in the red.");
