@@ -330,49 +330,82 @@ def lane_pole():
 
 # ------------------------------------------------------------------ building
 
-WALL_H = 1.5
+WALL_H = 1.77
+WALL_TOP = 1.85
+WALL_DEPTH = 0.30  # reaches the floor edge from the side-wall centres at +/-0.15
+
+
+def wall_segment(name, length):
+    """Flush ends: caps must not overlap the next segment at a 1 m pitch."""
+    h = length / 2
+    d = WALL_DEPTH / 2
+    begin()
+    box_mm((-h, 0, -d), (h, WALL_H, d), 'wall')
+    # Continuous dado, recessed-looking skirting and a slim brand rail on both faces.
+    box_mm((-h, 0.10, -d - 0.006), (h, 0.48, d + 0.006), 'wall_dark')
+    box_mm((-h, 0, -d - 0.012), (h, 0.10, d + 0.012), 'trim')
+    box_mm((-h, 1.16, -d - 0.012), (h, 1.25, d + 0.012), 'brand_dark')
+    box_mm((-h, 1.25, -d - 0.014), (h, 1.29, d + 0.014), 'brand')
+    box_mm((-h, WALL_H, -0.17), (h, WALL_TOP, 0.17), 'trim')
+    return finish(name)
 
 
 def wall():
-    """1 m of interior wall along X, 0.25 thick (z -0.125..0.125)."""
-    begin()
-    box_mm((-0.5, 0, -0.12), (0.5, WALL_H, 0.12), 'wall')
-    box_mm((-0.5, 0, -0.14), (0.5, 0.14, 0.14), 'wall_dark')
-    box_mm((-0.5, 1.12, -0.135), (0.5, 1.27, 0.135), 'brand')
-    box_mm((-0.52, WALL_H, -0.15), (0.52, WALL_H + 0.08, 0.15), 'trim')
-    return finish('Wall')
+    """1 m wall along X, floor origin, 0.30 m body and flush end caps."""
+    return wall_segment('Wall', 1.0)
+
+
+def wall_half():
+    """Half-metre return for corners/office junctions; see the code handoff."""
+    return wall_segment('WallHalf', 0.5)
 
 
 def wall_window():
     """1 m of shop front: low wall and a glazed panel."""
     begin()
-    box_mm((-0.5, 0, -0.12), (0.5, 0.45, 0.12), 'wall_dark')
-    box_mm((-0.5, 0.45, -0.06), (0.5, 1.75, 0.06), 'glass_tint')
-    box_mm((-0.5, 0.45, -0.1), (-0.45, 1.8, 0.1), 'trim')
-    box_mm((-0.52, 1.75, -0.15), (0.52, 1.85, 0.15), 'trim')
-    box_mm((-0.5, 0.42, -0.14), (0.5, 0.48, 0.14), 'trim')
+    box_mm((-0.5, 0, -0.15), (0.5, 0.45, 0.15), 'wall_dark')
+    box_mm((-0.5, 0, -0.162), (0.5, 0.10, 0.162), 'trim')
+    box_mm((-0.475, 0.48, -0.025), (0.475, WALL_H, 0.025), 'glass')
+    # Both ends framed; adjacent half mullions make one 50 mm mullion.
+    for x in (-0.5, 0.475):
+        box_mm((x, 0.45, -0.10), (x + 0.025, WALL_H, 0.10), 'trim')
+    box_mm((-0.5, WALL_H, -0.17), (0.5, WALL_TOP, 0.17), 'trim')
+    box_mm((-0.5, 0.42, -0.17), (0.5, 0.48, 0.17), 'trim')
+    # Safety band, readable from either side of the clear glazing.
+    box_mm((-0.475, 1.05, -0.028), (0.475, 1.10, 0.028), 'white')
     return finish('WallWindow')
 
 
 def wall_post():
     begin()
-    box_mm((-0.18, 0, -0.18), (0.18, 1.9, 0.18), 'trim')
+    # A 20 mm proud cap covers intersecting wall caps without coplanar flicker.
+    box_mm((-0.18, 0, -0.18), (0.18, WALL_TOP + 0.02, 0.18), 'trim')
     return finish('WallPost')
 
 
 def entrance():
     """4 m automatic entrance, centred on x = 0, in a wall along X."""
     begin()
-    for x in (-2.0, 2.0):
-        box_mm((x - 0.15, 0, -0.2), (x + 0.15, 2.4, 0.2), 'trim')
-    box_mm((-2.15, 2.2, -0.25), (2.15, 2.75, 0.25), 'brand')
-    box_mm((-1.9, 2.3, -0.27), (1.9, 2.65, -0.25), 'white')
+    # Keep the jambs inside the four-metre opening instead of intersecting windows.
+    for x in (-2.0, 1.85):
+        box_mm((x, 0, -0.18), (x + 0.15, 2.4, 0.18), 'trim')
+        box_mm((x + 0.025, 0.12, -0.195), (x + 0.125, 1.8, -0.18), 'steel')
+    box_mm((-2.0, 2.2, -0.25), (2.0, 2.75, 0.25), 'brand_dark')
+    box_mm((-1.98, 2.69, -0.27), (1.98, 2.75, 0.27), 'brand')
+    box_mm((-1.83, 2.32, -0.27), (1.83, 2.62, -0.25), 'white')
+    box_mm((-1.80, 2.20, -0.20), (1.80, 2.23, 0.20), 'light')
+    box_mm((-0.09, 2.23, -0.29), (0.09, 2.30, -0.25), 'black')
     for x in (-1.85, 1.15):
         box_mm((x, 0, -0.04), (x + 0.7, 2.2, 0.04), 'glass')
         box_mm((x, 0, -0.05), (x + 0.7, 0.06, 0.05), 'trim')
         box_mm((x, 2.14, -0.05), (x + 0.7, 2.2, 0.05), 'trim')
+        for edge in (x, x + 0.675):
+            box_mm((edge, 0.06, -0.05), (edge + 0.025, 2.14, 0.05), 'trim')
+        box_mm((x + 0.025, 1.05, -0.055), (x + 0.675, 1.10, 0.055), 'white')
     box_mm((-1.6, 0.0, -1.2), (1.6, 0.02, -0.25), 'mat_blue')
     box_mm((-1.6, 0.0, 0.25), (1.6, 0.02, 1.2), 'mat_blue')
+    for z in (-1.08, -0.94, -0.80, -0.66, -0.52, -0.38, 0.38, 0.52, 0.66, 0.80, 0.94, 1.08):
+        box_mm((-1.5, 0.02, z), (1.5, 0.023, z + 0.035), 'trim')
     text_mesh('WELCOME', 0.22, (0, 2.47, -0.28), 'brand_dark', depth=0.03)
     return finish('Entrance')
 
@@ -610,7 +643,7 @@ def car(color):
 
 FIXTURES = [gondola, gondola_end, fridge, freezer, produce_table, bakery_shelf, oven, deli_counter, deli_back,
             scale_and_slicer, checkout, lane_pole]
-BUILDING = [wall, wall_window, wall_post, entrance, store_sign, dock_door]
+BUILDING = [wall, wall_half, wall_window, wall_post, entrance, store_sign, dock_door]
 DECOR = [rack, pallet, truck, desk, office_chair, filing_cabinet, plant, whiteboard, sofa, cart_corral,
          basket_stack, tree, bench]
 SIGNS = [('Sign_grocery', 'GROCERY', 'gold'), ('Sign_produce', 'PRODUCE', 'green'),

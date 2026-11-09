@@ -1,7 +1,7 @@
 """
 Builds every Storemanager model, renders preview images and exports FBX files.
 
-    python3 build_models.py [--preview] [--export] [--only NAME,NAME]
+    python3 build_models.py [--preview] [--walls] [--export] [--fixtures-only]
 
 Exports go to Assets/StoreManager/Resources/Models/:
     Fixtures.fbx  shelves, fridges, counters, checkouts, walls, signs
@@ -305,8 +305,12 @@ if __name__ == '__main__':
         made = build_all()
     if '--preview' in args:
         render_previews()
+    if '--walls' in args:
+        import building_preview
+        made = build_all()
+        building_preview.render_building(PREVIEW)
     if '--export' in args:
         # previews add instances; rebuild cleanly before exporting
-        if '--preview' in args:
+        if '--preview' in args or '--walls' in args:
             made = build_all()
         export_all(made)
