@@ -44,6 +44,8 @@ Tools/Blender/   scripted low-poly models (build_models.py) and textures;
                  characters.py: body parts, hair, uniforms, basket/trolley (C_*)
                  people.py: preview lineup (--people), same layout as CharacterRig.cs
 Tools/Headless/  simulation harness (run.sh)
+docs/DESIGN.md   game design and rules
+docs/team/       how Claude (code) and Codex (graphics) work together: roles, asset contract, handoffs
 ```
 
 ## Headless balance runs
