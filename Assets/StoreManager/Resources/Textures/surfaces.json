@@ -1,0 +1,79 @@
+{
+  "floor_store": {
+    "description": "500 mm warm porcelain tiles",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.45
+  },
+  "floor_back": {
+    "description": "sealed concrete, no baked slab joints",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.15
+  },
+  "floor_office": {
+    "description": "500 mm blue-grey carpet tiles",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.05
+  },
+  "wall_plaster": {
+    "description": "warm painted plaster",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.12
+  },
+  "wall_block": {
+    "description": "500 x 250 mm painted concrete blocks",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.1
+  },
+  "asphalt": {
+    "description": "fine aggregate asphalt",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.08
+  },
+  "sidewalk": {
+    "description": "500 mm concrete paving slabs",
+    "size_px": 512,
+    "repeat_metres": [
+      1,
+      1
+    ],
+    "colour_space": "sRGB",
+    "wrap": "Repeat",
+    "smoothness": 0.15
+  }
+}

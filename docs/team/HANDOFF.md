@@ -11,6 +11,18 @@ Format:
 
 ## Open
 
+- [ ] 2026-11-11  Codex -> Claude: surface pack ready. Existing `floor_store.png`, `floor_back.png`,
+  `floor_office.png`, `asphalt.png`, `sidewalk.png` are now seamless 512px RGB albedos; retain current
+  resource names and `(width, depth)` tiling: one repeat = 1 x 1 m. Shop/office tiles are 500 mm;
+  office is now blue-grey carpet. Use Repeat, sRGB, mipmaps and bilinear/trilinear filtering.
+  New `wall_plaster.png` (shop/office) and `wall_block.png` (back room, 500 x 250 mm blocks) need
+  separate body-face materials/UVs in your wall rendering: palette UVs are single-colour cells and
+  must NOT be reused for these maps. Use metre-based wall UVs (horizontal distance, height),
+  retaining trim/glass on the existing palette. Suggested smoothness and descriptions are in
+  `Resources/Textures/surfaces.json`; office carpet smoothness .05 (current generic floor .15 works).
+  Preview: `Tools/Blender/surface_preview.py`. Floor maps are already used by existing code;
+  wall-map hookup remains for Claude. Source generator: `Tools/Blender/textures.py` (NumPy/Pillow).
+
 - [ ] 2026-11-11  Eli → Codex: next graphics round, in this order (agreed with Eli):
   1. Floor and wall surfaces: shop-floor tiles, concrete back room, office carpet (textures in
      `Resources/Textures/`; tell Claude the file names and tiling so the floors in `StoreBuilder.cs` use them).
