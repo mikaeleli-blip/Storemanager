@@ -35,7 +35,9 @@ change. Adding new models is fine any time; they're only used once the code asks
 - Walls: `Wall` is a 1 m segment along X, `WallHalf` a 0.5 m one with the same profile (0.30 m body, origin
   centred on the floor). Side walls run at x = -0.15 and W + 0.15 (yaw 90): full segments for z = 4..34, half
   segments at z = 3.75 and 34.25; the office partition gets halves at z = 26.75 and 34.25.
-Exported but not used by the game yet: `GondolaEnd`, `DeliBack`, `Sign_<department>`.
+Exported but not used by the game yet: `GondolaEnd`, `DeliBack`.
+`Sign_<category id>` (grocery, produce, dairy, frozen, household, bakery, deli): hung by the code at y = 2.35 over
+the middle of each department's shelves, unrotated; the board's base is its origin and it reads from -Z.
 
 - Shelf-type fixtures are 1 m segments along Z, customers on both X sides (see `fixtures.py`).
 - Safety checks in `ModelLibrary.Calibrate()`: the **Gondola is 1.86 m tall** (used to detect wrong import

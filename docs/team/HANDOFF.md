@@ -18,9 +18,8 @@ Format:
   3. Back room and deliveries: roll cages, hand trucks, pallets of cases, so stockers can visibly carry stock.
   4. Outside: street, kerbs and neighbouring buildings around the car park.
   Post the model names and frames here as each one lands; Claude wires them in.
-- [ ] 2026-11-11  Eli → Claude: next code round: check the UI Toolkit screens compile and work in Unity; the
-  wall request below; save/load and a New game button; office computer and build mode in UI Toolkit; hang the
-  department signs (`Sign_<department>`).
+- [ ] 2026-11-11  Eli → Claude: next code round. Done: walls, save/load + New game, department signs. Left:
+  check the UI Toolkit screens at runtime in Unity (they compile); office computer and build mode in UI Toolkit.
 
 - [ ] 2026-11-09  Eli: decide who owns the UI look (`Resources/UI/`: stylesheet, fonts, icons). Claude has it
   for now. (If it goes to Codex: app icons for the office computer.)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace StoreManager
@@ -79,6 +80,65 @@ namespace StoreManager
         static void BlockAll(StoreGrid g, Vector2Int[] tiles)
         {
             for (int i = 0; i < tiles.Length; i++) g.SetBlocked(tiles[i].x, tiles[i].y, true);
+        }
+
+        // ------------------------------------------------------------------ department signs
+
+        Transform signRoot;
+        readonly Dictionary<string, Transform> signs = new Dictionary<string, Transform>();
+        readonly Dictionary<string, Vector3> signSum = new Dictionary<string, Vector3>();
+        readonly Dictionary<string, int> signCount = new Dictionary<string, int>();
+        readonly List<string> signGone = new List<string>();
+        public const float SignHeight = 2.35f;
+
+        /// <summary>
+        /// Hangs a department sign (Sign_&lt;category&gt;) over the middle of each department's shelves, and moves or
+        /// takes it down as the shelves change.
+        /// </summary>
+        public void UpdateSigns()
+        {
+            if (!Models) return;
+            if (signRoot == null)
+            {
+                signRoot = new GameObject("Department Signs").transform;
+                signRoot.SetParent(store.transform, false);
+            }
+            signSum.Clear();
+            signCount.Clear();
+            for (int i = 0; i < store.Fixtures.Count; i++)
+            {
+                var f = store.Fixtures[i];
+                if (f.Removed || f.Product == null || !f.HoldsProducts) continue;
+                string id = f.Product.Category.Def.Id;
+                Vector3 s;
+                signSum.TryGetValue(id, out s);
+                signSum[id] = s + f.Center;
+                int n;
+                signCount.TryGetValue(id, out n);
+                signCount[id] = n + 1;
+            }
+            signGone.Clear();
+            foreach (var kv in signs) if (!signCount.ContainsKey(kv.Key)) signGone.Add(kv.Key);
+            for (int i = 0; i < signGone.Count; i++)
+            {
+                if (signs[signGone[i]] != null) Object.Destroy(signs[signGone[i]].gameObject);
+                signs.Remove(signGone[i]);
+            }
+            foreach (var kv in signCount)
+            {
+                Vector3 p = signSum[kv.Key] / kv.Value;
+                p.y = SignHeight;
+                Transform t;
+                if (!signs.TryGetValue(kv.Key, out t) || t == null)
+                {
+                    string model = "Sign_" + kv.Key;
+                    if (!ModelLibrary.Has(model)) continue;
+                    var go = M(model, signRoot, p.x, p.y, p.z);
+                    if (go == null) continue;
+                    signs[kv.Key] = go.transform;
+                }
+                else if ((t.localPosition - p).sqrMagnitude > 0.0001f) t.localPosition = p;
+            }
         }
 
         // ------------------------------------------------------------------ building (models)

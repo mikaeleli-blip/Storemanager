@@ -355,7 +355,7 @@ store (staff near them work 5% faster) and do the jobs you delegate:
 - 1 second at 1x = 30 game seconds. Open 08:00–22:00.
 - Speeds: pause, 1x, 2x, 4x, 8x. While the store is closed, time runs 4x
   faster (can be turned off).
-- No save system yet: playtests in Unity, where pausing serves as a save.
+- Saving: see "Saving and loading" below.
 
 
 ## Saving and loading

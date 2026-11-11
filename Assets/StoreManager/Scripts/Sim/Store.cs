@@ -354,6 +354,7 @@ namespace StoreManager
         void UpdateVisuals()
         {
             for (int i = 0; i < Fixtures.Count; i++) Fixtures[i].UpdateVisuals();
+            Builder.UpdateSigns();
             for (int i = 0; i < Lanes.Count; i++)
             {
                 var lane = Lanes[i];
