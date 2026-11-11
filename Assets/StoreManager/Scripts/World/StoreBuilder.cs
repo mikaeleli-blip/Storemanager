@@ -148,6 +148,25 @@ namespace StoreManager
             return ModelLibrary.Spawn(name, parent, new Vector3(x, y, z), yaw, tilt);
         }
 
+        /// <summary>
+        /// A wall piece with Codex's surface textures on both faces: painted blocks facing the back room and the
+        /// yard, plaster facing the shop, the office and the street side.
+        /// </summary>
+        static void Wall(string name, Transform parent, float x, float z, float yaw = 0f)
+        {
+            var at = new Vector3(x, 0f, z);
+            var rot = Quaternion.Euler(0f, yaw, 0f);
+            ModelLibrary.SpawnFaced(name, parent, at, yaw, WallSurface(at + rot * new Vector3(0f, 0f, -0.4f)),
+                WallSurface(at + rot * new Vector3(0f, 0f, 0.4f)));
+        }
+
+        static string WallSurface(Vector3 p)
+        {
+            bool backRoom = p.z > Layout.BackWall + 0.5f && p.z < Layout.RearWall + 0.5f && p.x > Layout.OfficeWallX + 0.5f;
+            bool yard = p.z > Layout.RearWall + 0.5f;
+            return backRoom || yard ? "wall_block" : "wall_plaster";
+        }
+
         static void Floor(Transform parent, string name, string tex, float x, float z, float w, float d, Color tint, float y = 0f)
         {
             var go = Mats.Box(name, parent, x, z, w, d, y - 0.05f, 0.05f, Color.white);
@@ -195,13 +214,13 @@ namespace StoreManager
             // so the 0.3 m wall bodies meet without gaps (Codex, HANDOFF 2026-11-09).
             for (int z = Layout.LobbyStart; z <= Layout.BackEnd; z++)
             {
-                M("Wall", r, -0.15f, 0f, z + 0.5f, 90f);
-                M("Wall", r, W + 0.15f, 0f, z + 0.5f, 90f);
+                Wall("Wall", r, -0.15f, z + 0.5f, 90f);
+                Wall("Wall", r, W + 0.15f, z + 0.5f, 90f);
             }
             foreach (float z in new[] { Layout.FrontWall + 0.75f, Layout.RearWall + 0.25f })
             {
-                M("WallHalf", r, -0.15f, 0f, z, 90f);
-                M("WallHalf", r, W + 0.15f, 0f, z, 90f);
+                Wall("WallHalf", r, -0.15f, z, 90f);
+                Wall("WallHalf", r, W + 0.15f, z, 90f);
             }
             M("WallPost", r, -0.15f, 0f, 3.5f);
             M("WallPost", r, W + 0.15f, 0f, 3.5f);
@@ -212,7 +231,7 @@ namespace StoreManager
             {
                 int local = x % Layout.SlotWidth;
                 if (local == 10 || local == 11) continue;
-                M("Wall", r, x + 0.5f, 0f, Layout.BackWall + 0.5f);
+                Wall("Wall", r, x + 0.5f, Layout.BackWall + 0.5f);
             }
             for (int s = 0; s < slots; s++)
             {
@@ -223,15 +242,15 @@ namespace StoreManager
             for (int z = Layout.BackStart; z <= Layout.BackEnd; z++)
             {
                 if (z == 30) continue;   // office doorway
-                M("Wall", r, Layout.OfficeWallX + 0.5f, 0f, z + 0.5f, 90f);
+                Wall("Wall", r, Layout.OfficeWallX + 0.5f, z + 0.5f, 90f);
             }
-            M("WallHalf", r, Layout.OfficeWallX + 0.5f, 0f, Layout.BackWall + 0.75f, 90f);
-            M("WallHalf", r, Layout.OfficeWallX + 0.5f, 0f, Layout.RearWall + 0.25f, 90f);
+            Wall("WallHalf", r, Layout.OfficeWallX + 0.5f, Layout.BackWall + 0.75f, 90f);
+            Wall("WallHalf", r, Layout.OfficeWallX + 0.5f, Layout.RearWall + 0.25f, 90f);
 
             for (int x = 0; x < W; x++)
             {
                 if (x >= W - 6 && x <= W - 3) continue;
-                M("Wall", r, x + 0.5f, 0f, Layout.RearWall + 0.5f);
+                Wall("Wall", r, x + 0.5f, Layout.RearWall + 0.5f);
             }
             M("DockDoor", r, W - 4f, 0f, Layout.RearWall + 0.5f);
 

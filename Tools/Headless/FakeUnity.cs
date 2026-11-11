@@ -37,6 +37,7 @@ namespace UnityEngine
         public const float PI = 3.14159265f;
         public const float Rad2Deg = 57.29578f, Deg2Rad = 0.01745329f;
         public static float Acos(float v) { return (float)Math.Acos(v); }
+        public static float Floor(float v) { return (float)Math.Floor(v); }
         public static float Clamp(float v, float a, float b) { return v < a ? a : v > b ? b : v; }
         public static int Clamp(int v, int a, int b) { return v < a ? a : v > b ? b : v; }
         public static float Clamp01(float v) { return Clamp(v, 0f, 1f); }
@@ -75,6 +76,7 @@ namespace UnityEngine
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
         public static Vector2 zero { get { return new Vector2(0, 0); } }
+        public static Vector2 one { get { return new Vector2(1, 1); } }
         public static Vector2 operator +(Vector2 a, Vector2 b) { return new Vector2(a.x + b.x, a.y + b.y); }
         public static Vector2 operator -(Vector2 a, Vector2 b) { return new Vector2(a.x - b.x, a.y - b.y); }
         public static Vector2 operator *(Vector2 a, float f) { return new Vector2(a.x * f, a.y * f); }
@@ -111,6 +113,8 @@ namespace UnityEngine
         public static Vector3 forward { get { return new Vector3(0, 0, 1); } }
         public static Vector3 back { get { return new Vector3(0, 0, -1); } }
         public static Vector3 right { get { return new Vector3(1, 0, 0); } }
+        public static Vector3 Scale(Vector3 a, Vector3 b) { return new Vector3(a.x * b.x, a.y * b.y, a.z * b.z); }
+        public static float Dot(Vector3 a, Vector3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
         public float magnitude { get { return (float)Math.Sqrt(x * x + y * y + z * z); } }
         public float sqrMagnitude { get { return x * x + y * y + z * z; } }
         public Vector3 normalized { get { float m = magnitude; return m > 1e-5f ? this / m : zero; } }
@@ -458,6 +462,16 @@ namespace UnityEngine
         public void Clear() { }
         public void MarkDynamic() { }
         public void CombineMeshes(CombineInstance[] parts, bool merge, bool useMatrices) { }
+        public string name;
+        public bool isReadable;
+        public Vector3[] vertices = new Vector3[0], normals = new Vector3[0];
+        public Vector2[] uv = new Vector2[0];
+        public int[] triangles = new int[0];
+        public void SetVertices(System.Collections.Generic.List<Vector3> v) { }
+        public void SetNormals(System.Collections.Generic.List<Vector3> v) { }
+        public void SetUVs(int channel, System.Collections.Generic.List<Vector2> v) { }
+        public void SetTriangles(System.Collections.Generic.List<int> t, int submesh) { }
+        public void RecalculateBounds() { }
     }
     public struct CombineInstance { public Mesh mesh; public Matrix4x4 transform; }
     public class TextAsset : Object { public string text = ""; }
@@ -516,7 +530,7 @@ namespace UnityEngine
     {
         public Color color;
         public Texture mainTexture;
-        public Vector2 mainTextureScale;
+        public Vector2 mainTextureScale, mainTextureOffset;
         public bool enableInstancing;
         public int renderQueue;
         public MaterialGlobalIlluminationFlags globalIlluminationFlags;
@@ -524,6 +538,7 @@ namespace UnityEngine
         public Material(Shader s) { shader = s; }
         public void SetTexture(string n, Texture t) { }
         public void SetTextureScale(string n, Vector2 v) { }
+        public void SetTextureOffset(string n, Vector2 v) { }
         public void SetColor(string n, Color c) { }
         public void SetFloat(string n, float v) { }
         public void SetInt(string n, int v) { }

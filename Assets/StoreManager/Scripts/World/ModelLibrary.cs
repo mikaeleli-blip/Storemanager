@@ -204,6 +204,108 @@ namespace StoreManager
             return go;
         }
 
+        // ------------------------------------------------------------------ textured wall faces
+
+        static readonly Dictionary<string, Mesh> faced = new Dictionary<string, Mesh>();
+
+        static Vector3 ModelSpace(Vector3 v) { return fixRotation * Vector3.Scale(fixScale, v); }
+
+        /// <summary>
+        /// A wall model split three ways: sub-mesh 0 keeps the palette (trim, dado, rails), 1 and 2 are the body's
+        /// two big faces (the innermost faces looking along -Z and +Z) with metre UVs (u along the wall, v up),
+        /// so a tiling texture can go on them. Null if the model is missing or its mesh isn't readable.
+        /// </summary>
+        static Mesh Faced(string name)
+        {
+            Mesh m;
+            if (faced.TryGetValue(name, out m)) return m;
+            faced[name] = null;
+            Mesh src;
+            if (!meshes.TryGetValue(name, out src) || src == null || !src.isReadable || src.subMeshCount != 1) return null;
+            var v = src.vertices;
+            var n = src.normals;
+            var uv = src.uv;
+            var t = src.triangles;
+            if (n == null || n.Length != v.Length || uv == null || uv.Length != v.Length) return null;
+
+            // The body faces: of the faces looking straight along Z, the ones closest to the middle.
+            float inner = float.MaxValue;
+            for (int i = 0; i < t.Length; i += 3)
+            {
+                Vector3 nz = ModelSpace(n[t[i]] + n[t[i + 1]] + n[t[i + 2]]).normalized;
+                if (Mathf.Abs(nz.z) < 0.98f) continue;
+                inner = Mathf.Min(inner, Mathf.Abs(ModelSpace(v[t[i]]).z));
+            }
+            if (inner == float.MaxValue) return null;
+
+            var verts = new List<Vector3>(v);
+            var norms = new List<Vector3>(n);
+            var uvs = new List<Vector2>(uv);
+            var rest = new List<int>();
+            var neg = new List<int>();
+            var pos = new List<int>();
+            for (int i = 0; i < t.Length; i += 3)
+            {
+                Vector3 nz = ModelSpace(n[t[i]] + n[t[i + 1]] + n[t[i + 2]]).normalized;
+                bool body = Mathf.Abs(nz.z) >= 0.98f;
+                for (int k = 0; k < 3 && body; k++) body = Mathf.Abs(Mathf.Abs(ModelSpace(v[t[i + k]]).z) - inner) < 0.002f;
+                if (!body) { rest.Add(t[i]); rest.Add(t[i + 1]); rest.Add(t[i + 2]); continue; }
+                var side = nz.z < 0f ? neg : pos;
+                for (int k = 0; k < 3; k++)
+                {
+                    // Seen from its own side the texture reads left to right, not mirrored.
+                    Vector3 p = ModelSpace(v[t[i + k]]);
+                    side.Add(verts.Count);
+                    verts.Add(v[t[i + k]]);
+                    norms.Add(n[t[i + k]]);
+                    uvs.Add(new Vector2(nz.z < 0f ? p.x : -p.x, p.y));
+                }
+            }
+            if (neg.Count == 0 && pos.Count == 0) return null;
+
+            m = new Mesh { name = name + " (faced)" };
+            if (verts.Count > 65000) m.indexFormat = IndexFormat.UInt32;
+            m.SetVertices(verts);
+            m.SetNormals(norms);
+            m.SetUVs(0, uvs);
+            m.subMeshCount = 3;
+            m.SetTriangles(rest, 0);
+            m.SetTriangles(neg, 1);
+            m.SetTriangles(pos, 2);
+            m.RecalculateBounds();
+            faced[name] = m;
+            return m;
+        }
+
+        /// <summary>
+        /// Spawns a wall piece with tiling textures on its two body faces: texNeg on the side its local -Z looks at,
+        /// texPos on the other. Texture offsets follow the world position, so neighbouring pieces line up.
+        /// Falls back to the plain palette model if the faces can't be made.
+        /// </summary>
+        public static GameObject SpawnFaced(string name, Transform parent, Vector3 position, float yaw, string texNeg, string texPos)
+        {
+            Load();
+            var mesh = Faced(name);
+            if (mesh == null) return Spawn(name, parent, position, yaw);
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = position;
+            go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f) * fixRotation;
+            go.transform.localScale = fixScale;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            Vector3 along = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+            float s = Vector3.Dot(position, along);
+            go.AddComponent<MeshRenderer>().sharedMaterials = new[]
+            {
+                palette,
+                Mats.Textured(texNeg, Vector2.one, Color.white, new Vector2(Frac(s), 0f)),
+                Mats.Textured(texPos, Vector2.one, Color.white, new Vector2(Frac(-s), 0f)),
+            };
+            return go;
+        }
+
+        static float Frac(float x) { return Mathf.Round((x - Mathf.Floor(x)) * 100f) / 100f % 1f; }
+
         public static string StockMesh(ProductDef p, bool counter)
         {
             return (counter ? "Deli_" : "Stock_") + p.Name.Replace(' ', '_');

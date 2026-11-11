@@ -35,6 +35,11 @@ change. Adding new models is fine any time; they're only used once the code asks
 - Walls: `Wall` is a 1 m segment along X, `WallHalf` a 0.5 m one with the same profile (0.30 m body, origin
   centred on the floor). Side walls run at x = -0.15 and W + 0.15 (yaw 90): full segments for z = 4..34, half
   segments at z = 3.75 and 34.25; the office partition gets halves at z = 26.75 and 34.25.
+- Wall textures: on `Wall` and `WallHalf` the code finds the **body faces** (of all faces looking straight
+  along ±Z, the ones closest to the middle: today the 'wall' box at z = ±0.15) and gives them metre UVs
+  (u along the wall, v = height, 1 repeat = 1 m) and `wall_plaster` (shop, office, street side) or `wall_block`
+  (back room, yard). Everything else keeps the palette. Keep the body box the innermost ±Z faces.
+  `Fixtures.fbx` is imported readable for this. Smoothness comes from `Textures/surfaces.json`.
 Exported but not used by the game yet: `GondolaEnd`, `DeliBack`.
 `Sign_<category id>` (grocery, produce, dairy, frozen, household, bakery, deli): hung by the code at y = 2.35 over
 the middle of each department's shelves, unrotated; the board's base is its origin and it reads from -Z.

@@ -41,7 +41,13 @@ namespace StoreManager
         /// <summary>Tiled texture from Resources/Textures (1 texture = 1 m), tinted.</summary>
         public static Material Textured(string texture, Vector2 tiling, Color tint)
         {
-            string key = texture + "|" + tiling.x + "x" + tiling.y + "|" + tint;
+            return Textured(texture, tiling, tint, Vector2.zero);
+        }
+
+        /// <summary>Same, shifted by offset (in repeats) so neighbouring wall pieces line up.</summary>
+        public static Material Textured(string texture, Vector2 tiling, Color tint, Vector2 offset)
+        {
+            string key = texture + "|" + tiling.x + "x" + tiling.y + "|" + tint + "|" + offset.x + "," + offset.y;
             Material m;
             if (textured.TryGetValue(key, out m) && m != null) return m;
             if (shader == null) shader = FindShader();
@@ -51,20 +57,46 @@ namespace StoreManager
             {
                 m.mainTexture = tex;
                 m.mainTextureScale = tiling;
+                m.mainTextureOffset = offset;
                 if (Urp)
                 {
                     m.SetTexture("_BaseMap", tex);
                     m.SetTextureScale("_BaseMap", tiling);
+                    m.SetTextureOffset("_BaseMap", offset);
                 }
             }
             m.color = tint;
             if (Urp)
             {
                 m.SetColor("_BaseColor", tint);
-                m.SetFloat("_Smoothness", texture.StartsWith("floor_store") ? 0.45f : 0.15f);
+                m.SetFloat("_Smoothness", Smoothness(texture));
             }
             textured[key] = m;
             return m;
+        }
+
+        static string surfaces;
+
+        /// <summary>Smoothness for a surface texture from Codex's Resources/Textures/surfaces.json (0.15 if missing).</summary>
+        public static float Smoothness(string texture)
+        {
+            if (surfaces == null)
+            {
+                var ta = Resources.Load<TextAsset>("Textures/surfaces");
+                surfaces = ta != null ? ta.text : "";
+            }
+            int at = surfaces.IndexOf("\"" + texture + "\"");
+            if (at < 0) return 0.15f;
+            int end = surfaces.IndexOf('}', at);
+            int k = surfaces.IndexOf("\"smoothness\"", at);
+            if (k < 0 || (end >= 0 && k > end)) return 0.15f;
+            k = surfaces.IndexOf(':', k) + 1;
+            while (k < surfaces.Length && char.IsWhiteSpace(surfaces[k])) k++;
+            int stop = k;
+            while (stop < surfaces.Length && "0123456789.-".IndexOf(surfaces[stop]) >= 0) stop++;
+            float v;
+            return float.TryParse(surfaces.Substring(k, stop - k), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out v) ? Mathf.Clamp01(v) : 0.15f;
         }
 
         /// <summary>Self-lit colour for lights and indicators (picked up by bloom).</summary>

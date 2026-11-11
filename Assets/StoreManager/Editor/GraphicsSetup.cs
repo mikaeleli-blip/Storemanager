@@ -147,7 +147,7 @@ namespace StoreManager.EditorTools
         const string Textures = "Assets/StoreManager/Resources/Textures/";
 
         // Bump when the settings below change, so Unity re-imports the models with them.
-        public override uint GetVersion() { return 2; }
+        public override uint GetVersion() { return 3; }
 
         void OnPreprocessModel()
         {
@@ -162,8 +162,9 @@ namespace StoreManager.EditorTools
             mi.importLights = false;
             mi.importBlendShapes = false;
             mi.animationType = ModelImporterAnimationType.None;
-            // Shelf rows are merged from the product units at runtime, which needs their vertex data.
-            mi.isReadable = assetPath.EndsWith("Products.fbx");
+            // Shelf rows are merged from the product units at runtime, and the walls get their textured faces
+            // split off (ModelLibrary.Faced): both need the vertex data.
+            mi.isReadable = assetPath.EndsWith("Products.fbx") || assetPath.EndsWith("Fixtures.fbx");
             mi.meshCompression = ModelImporterMeshCompression.Off;
             mi.importNormals = ModelImporterNormals.Import;
             mi.addCollider = false;
