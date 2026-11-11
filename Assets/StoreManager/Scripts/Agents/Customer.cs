@@ -28,14 +28,14 @@ namespace StoreManager
         string pendingReason = "";
 
         // Checkout
-        public CheckoutLane Lane;
+        [System.NonSerialized] public CheckoutLane Lane;
         public bool Paid;
         public bool AtServiceSpot;
 
         // Counter
         public bool AtCounter;
         public bool CounterServed;
-        public Fixture AtFixture;
+        [System.NonSerialized] public Fixture AtFixture;
 
         bool gaveUp, reaching;
         float patience;

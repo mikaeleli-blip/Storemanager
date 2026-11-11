@@ -11,9 +11,9 @@ namespace StoreManager
         public static BuildMode I;
 
         public bool Active;
-        public FixtureDef Placing;
-        public Fixture Moving;
-        public Fixture Selected;
+        [System.NonSerialized] public FixtureDef Placing;
+        [System.NonSerialized] public Fixture Moving;
+        [System.NonSerialized] public Fixture Selected;
         public int Rot;
 
         Store store;

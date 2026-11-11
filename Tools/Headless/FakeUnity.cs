@@ -313,6 +313,7 @@ namespace UnityEngine
             return null;
         }
 
+        public static T[] FindObjectsByType<T>() where T : Object { return FindObjectsByType<T>(FindObjectsSortMode.None); }
         public static T[] FindObjectsByType<T>(FindObjectsSortMode mode) where T : Object
         {
             var l = new List<T>();

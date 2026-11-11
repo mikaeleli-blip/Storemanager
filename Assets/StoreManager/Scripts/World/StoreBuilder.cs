@@ -131,10 +131,17 @@ namespace StoreManager
             M("Entrance", r, 4f, 0f, 3.5f);
             M("StoreSign", r, Mathf.Max(13f, W * 0.5f + 2f), 1.85f, 3.5f);
 
-            for (int z = 3; z <= 34; z++)
+            // Side walls: full 1 m segments between the front and rear walls, half segments into the corners
+            // so the 0.3 m wall bodies meet without gaps (Codex, HANDOFF 2026-11-09).
+            for (int z = Layout.LobbyStart; z <= Layout.BackEnd; z++)
             {
                 M("Wall", r, -0.15f, 0f, z + 0.5f, 90f);
                 M("Wall", r, W + 0.15f, 0f, z + 0.5f, 90f);
+            }
+            foreach (float z in new[] { Layout.FrontWall + 0.75f, Layout.RearWall + 0.25f })
+            {
+                M("WallHalf", r, -0.15f, 0f, z, 90f);
+                M("WallHalf", r, W + 0.15f, 0f, z, 90f);
             }
             M("WallPost", r, -0.15f, 0f, 3.5f);
             M("WallPost", r, W + 0.15f, 0f, 3.5f);
@@ -155,9 +162,11 @@ namespace StoreManager
 
             for (int z = Layout.BackStart; z <= Layout.BackEnd; z++)
             {
-                if (z == 30) continue;
+                if (z == 30) continue;   // office doorway
                 M("Wall", r, Layout.OfficeWallX + 0.5f, 0f, z + 0.5f, 90f);
             }
+            M("WallHalf", r, Layout.OfficeWallX + 0.5f, 0f, Layout.BackWall + 0.75f, 90f);
+            M("WallHalf", r, Layout.OfficeWallX + 0.5f, 0f, Layout.RearWall + 0.25f, 90f);
 
             for (int x = 0; x < W; x++)
             {

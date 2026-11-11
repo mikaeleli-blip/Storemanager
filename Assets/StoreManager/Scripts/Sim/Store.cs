@@ -10,10 +10,10 @@ namespace StoreManager
 
         public GameClock Clock;
         public CameraRig Cam;
-        public StoreGrid Grid;
-        public StoreBuilder Builder;
-        public StaffManager Staff;
-        public DirtManager Dirt;
+        [System.NonSerialized] public StoreGrid Grid;
+        [System.NonSerialized] public StoreBuilder Builder;
+        [System.NonSerialized] public StaffManager Staff;
+        [System.NonSerialized] public DirtManager Dirt;
         public ManagerAvatar Avatar;
         public readonly Economy Economy = new Economy();
         public readonly Delegation Delegation = new Delegation();

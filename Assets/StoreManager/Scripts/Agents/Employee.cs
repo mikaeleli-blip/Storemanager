@@ -8,7 +8,7 @@ namespace StoreManager
     {
         public Role Role;
         public Shift Shift;
-        public Category AssignedCategory;   // stockers only (null = anywhere)
+        [System.NonSerialized] public Category AssignedCategory;   // stockers only (null = anywhere)
 
         public float Speed, Service, Reliability, Leadership;
         public float WorkEthic = 5f, Ambition = 5f, Charm = 5f;   // hidden
@@ -26,7 +26,7 @@ namespace StoreManager
 
         // Career and record
         public Rank Rank;
-        public Category Department;            // department managers
+        [System.NonSerialized] public Category Department;            // department managers
         public bool OrdersForDepartment = true;
         public int ProbationEnds, NextReviewDay;
         public int WarnedDay = -99, WrittenDay = -99;
@@ -45,7 +45,7 @@ namespace StoreManager
         public int PraisedDay = -1;
         public int LowMoraleShifts;
         public float BusyTime, ShiftTime;
-        public CheckoutLane Lane;
+        [System.NonSerialized] public CheckoutLane Lane;
 
         bool idle;
         float shiftStartAbs, plannedStartAbs;

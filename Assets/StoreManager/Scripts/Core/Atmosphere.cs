@@ -24,7 +24,7 @@ namespace StoreManager
         public void Init(Camera cam)
         {
             Light sun = null;
-            var lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+            var lights = FindObjectsByType<Light>();
             for (int i = 0; i < lights.Length; i++)
                 if (lights[i].type == LightType.Directional) { sun = lights[i]; break; }
             if (sun == null)
