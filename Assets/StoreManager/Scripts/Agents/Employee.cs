@@ -505,6 +505,7 @@ namespace StoreManager
             }
             cartProduct = null;
             cart.Clear();
+            if (Rig != null) Rig.ClearCases();
             if (claimed != null)
             {
                 if (claimed.ClaimedBy == this) claimed.ClaimedBy = null;
@@ -885,23 +886,63 @@ namespace StoreManager
             {
                 p.Back.MoveTo(cart, n);
                 cartProduct = p;
+                if (Rig != null) Rig.CarryCases(CasesOf(p, n), p.Category.Def.Color);
                 Status = "Stocking " + p.Name;
                 yield return StartCoroutine(MoveTo(f.IsCounter ? f.Work : f.AccessTile(Store.I.Grid)));
-                yield return StartCoroutine(DoWork(1f + n * 0.2f));
                 if (!f.Removed && f.Product == p)
                 {
+                    Face(f.Center - transform.position);
+                    if (Rig != null) Rig.PutCasesDown();
+                    yield return StartCoroutine(DoWork(1f));   // cutting the case open
                     // Facing the shelf: anything out of date comes off.
                     Store.I.WriteOff(p, f.Stock.RemoveExpired());
-                    int fit = Mathf.Max(0, f.Capacity - f.Stock.Total);
-                    curOutput += cart.MoveTo(f.Stock, Mathf.Min(fit, cart.Total));
+                    // Then one unit at a time, so the shelf fills up while you watch.
+                    float done = 0f;
+                    idle = false;
+                    while (cart.Total > 0 && !f.Removed && f.Product == p)
+                    {
+                        int fit = f.Capacity - f.Stock.Total;
+                        if (fit <= 0) break;
+                        done += Time.deltaTime * WorkSpeed;
+                        int k = Mathf.Min(Mathf.FloorToInt(done / UnitSeconds), Mathf.Min(fit, cart.Total));
+                        if (k > 0)
+                        {
+                            done -= k * UnitSeconds;
+                            curOutput += cart.MoveTo(f.Stock, k);
+                            if (Rig != null) Rig.SetCases(CasesOf(p, cart.Total));
+                        }
+                        yield return null;
+                    }
                 }
-                if (cart.Total > 0) cart.MoveTo(p.Back, cart.Total);
+                if (f.ClaimedBy == this) f.ClaimedBy = null;
+                claimed = null;
+                if (cart.Total > 0)
+                {
+                    // The shelf filled up (or went): what's left goes back to the stock room.
+                    if (Rig != null) Rig.PickCasesUp();
+                    Status = "Taking back " + p.Name;
+                    yield return StartCoroutine(MoveTo(Store.I.BackPickNear(f)));
+                    cart.MoveTo(p.Back, cart.Total);
+                }
+                if (Rig != null) Rig.ClearCases();
                 cart.Clear();
                 cartProduct = null;
             }
             if (f.ClaimedBy == this) f.ClaimedBy = null;
             claimed = null;
         }
+
+        const float UnitSeconds = 0.2f;   // putting one unit on the shelf
+
+        static int CasesOf(Product p, int units)
+        {
+            return units <= 0 ? 0 : Mathf.CeilToInt(units / (float)Mathf.Max(1, p.Def.CaseSize));
+        }
+
+        /// <summary>Stock this person is carrying right now (for saving: it goes back to the stock room).</summary>
+        public Product CarryingProduct { get { return cartProduct != null && cart.Total > 0 ? cartProduct : null; } }
+        public StockPile Carrying { get { return cart; } }
+        public Fixture Claimed { get { return claimed; } }
 
         /// <summary>
         /// Walks the back room and every shelf holding something perishable, pulls out expired stock and

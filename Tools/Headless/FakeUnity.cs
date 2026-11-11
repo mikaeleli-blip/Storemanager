@@ -420,6 +420,8 @@ namespace UnityEngine
         Transform parentField;
         public Vector3 position;
         public Quaternion rotation = Quaternion.identity;
+        public Vector3 forward { get { return rotation * Vector3.forward; } }
+        public Vector3 right { get { return rotation * Vector3.right; } }
         public Quaternion localRotation = Quaternion.identity;
         public Vector3 localScale = Vector3.one;
         public Transform parent { get { return parentField; } }

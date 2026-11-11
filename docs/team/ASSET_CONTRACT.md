@@ -74,6 +74,7 @@ per person in code; `pal` keeps the palette. Each part is spawned on a joint; fr
 | `Leg`, `LegBare` | hip at x = ±0.095 × width; sole at y = -0.82 |
 | `Basket`, `Bag`, `Cane`, `Phone` | grip in the hand |
 | `Trolley` | middle of the handle; the code holds it 0.99 m above the floor |
+| `Case` (shipping case; `C_Case__pal`, label parts `C_Case__label` tinted with the department colour) | bottom centre; 0.40 (x) × 0.22 (y) × 0.30 (z) m, label on the +Z side and on top. Not scaled by height. Until it exists the code draws cardboard cubes |
 
 The code checks `C_Head__skin` exists before using the people models. Joint numbers live in
 `Agents/CharacterRig.cs` and `Tools/Blender/people.py`; change them together.

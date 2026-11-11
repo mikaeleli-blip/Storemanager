@@ -223,6 +223,16 @@ namespace StoreManager
         Vector3 lastPos;
         bool packed;
 
+        // Shipping cases a stocker brings out of the back room (in the arms, or put down by the shelf).
+        const float CaseW = 0.4f, CaseH = 0.22f, CaseD = 0.3f;
+        static readonly Color Kraft = new Color(0.69f, 0.52f, 0.33f), Tape = new Color(0.85f, 0.77f, 0.6f);
+        Transform cases;
+        readonly List<GameObject> caseBoxes = new List<GameObject>();
+        int caseCount;
+        bool casesDown;
+        Color caseLabel;
+        float carryBlend;
+
         public Hold Holding { get { return hold; } }
         public Outfit Look { get { return outfit; } }
 
@@ -248,12 +258,22 @@ namespace StoreManager
         /// <summary>Change clothes (new role, promotion) or what they carry.</summary>
         public void Rebuild(Outfit o, Hold h)
         {
+            // Cases in the arms go with the old body; cases on the floor stay where they are.
+            bool carried = cases != null && !casesDown;
+            int carriedCount = caseCount;
+            if (carried) { cases = null; caseBoxes.Clear(); }
             if (root != null) Destroy(root.gameObject);
             if (trolley != null) Destroy(trolley.gameObject);
             items.Clear();
             basket = trolley = bag = cane = phone = null;
             packed = false;
             Assemble(o, h);
+            if (carried) CarryCases(carriedCount, caseLabel);
+        }
+
+        void OnDestroy()
+        {
+            if (cases != null && casesDown) Destroy(cases.gameObject);
         }
 
         static Transform Node(string name, Transform parent, Vector3 pos)
@@ -395,6 +415,115 @@ namespace StoreManager
             }
         }
 
+
+        // ------------------------------------------------------------------ stock cases
+
+        public bool CarryingCases { get { return cases != null && !casesDown; } }
+
+        /// <summary>Picks up stock from the back room as shipping cases (two show in the arms).</summary>
+        public void CarryCases(int count, Color label)
+        {
+            ClearCases();
+            if (count <= 0) return;
+            caseLabel = label;
+            cases = Node("Cases", spine, new Vector3(0f, 0.17f, 0.3f));
+            cases.localScale = Vector3.one / scale;
+            casesDown = false;
+            SetCases(count);
+        }
+
+        /// <summary>Sets the cases down on the floor behind the stocker while they fill the shelf.</summary>
+        public void PutCasesDown()
+        {
+            if (cases == null || casesDown || agent == null) return;
+            var a = agent.transform;
+            casesDown = true;
+            cases.SetParent(a.parent, false);
+            cases.localScale = Vector3.one;
+            cases.position = a.position - a.forward * 0.55f + a.right * 0.15f;
+            cases.rotation = a.rotation * Quaternion.Euler(0f, 12f, 0f);
+            Layout();
+        }
+
+        /// <summary>Picks the cases back up off the floor (taking what didn't fit back to the stock room).</summary>
+        public void PickCasesUp()
+        {
+            if (cases == null || !casesDown) return;
+            casesDown = false;
+            cases.SetParent(spine, false);
+            cases.localPosition = new Vector3(0f, 0.17f, 0.3f);
+            cases.localRotation = Quaternion.identity;
+            cases.localScale = Vector3.one / scale;
+            Layout();
+        }
+
+        /// <summary>How many cases are left (empties get flattened and go away).</summary>
+        public void SetCases(int count)
+        {
+            if (cases == null) return;
+            if (count <= 0) { ClearCases(); return; }
+            caseCount = count;
+            Layout();
+        }
+
+        public void ClearCases()
+        {
+            if (cases != null) Destroy(cases.gameObject);
+            cases = null;
+            caseBoxes.Clear();
+            caseCount = 0;
+            casesDown = false;
+        }
+
+        void Layout()
+        {
+            int show = Mathf.Min(caseCount, casesDown ? 3 : 2);
+            while (caseBoxes.Count > show)
+            {
+                Destroy(caseBoxes[caseBoxes.Count - 1]);
+                caseBoxes.RemoveAt(caseBoxes.Count - 1);
+            }
+            while (caseBoxes.Count < show) caseBoxes.Add(MakeCase());
+            for (int i = 0; i < caseBoxes.Count; i++)
+            {
+                // In the arms: a stack of two. On the floor: two stacked and one beside.
+                var c = caseBoxes[i].transform;
+                bool beside = casesDown && i == 2;
+                c.localPosition = beside ? new Vector3(CaseW + 0.04f, 0f, 0.03f) : new Vector3(i == 1 ? 0.015f : 0f, i * CaseH, 0f);
+                c.localRotation = Quaternion.Euler(0f, i == 1 ? 5f : beside ? -9f : 0f, 0f);
+            }
+        }
+
+        GameObject MakeCase()
+        {
+            var c = new GameObject("Case").transform;
+            c.SetParent(cases, false);
+            // Codex's model when there is one (C_Case__pal, labels in C_Case__label), else grey-box cubes.
+            var parts = ModelLibrary.CharacterPart("Case");
+            if (parts != null && parts.Count > 0)
+            {
+                for (int i = 0; i < parts.Count; i++)
+                {
+                    var go = ModelLibrary.Spawn(parts[i].Key, c, Vector3.zero);
+                    if (go != null && parts[i].Value == "label") go.GetComponent<Renderer>().sharedMaterial = Mats.Get(caseLabel);
+                }
+                return c.gameObject;
+            }
+            Cube(c, new Vector3(0f, CaseH * 0.5f, 0f), new Vector3(CaseW, CaseH, CaseD), Kraft);
+            Cube(c, new Vector3(0f, CaseH + 0.002f, 0f), new Vector3(0.07f, 0.004f, CaseD + 0.006f), Tape);
+            // Department-coloured labels, on the front and on top where the camera sees them.
+            Cube(c, new Vector3(0f, CaseH * 0.55f, CaseD * 0.5f + 0.002f), new Vector3(CaseW * 0.55f, CaseH * 0.42f, 0.004f), caseLabel);
+            Cube(c, new Vector3(CaseW * 0.29f, CaseH + 0.003f, -CaseD * 0.18f), new Vector3(0.1f, 0.004f, 0.12f), caseLabel);
+            return c.gameObject;
+        }
+
+        static void Cube(Transform parent, Vector3 pos, Vector3 size, Color color)
+        {
+            var go = Mats.Prim(PrimitiveType.Cube, "Part", parent, Vector3.zero, size, color, false);
+            go.transform.localPosition = pos;
+            go.transform.localRotation = Quaternion.identity;
+        }
+
         // ------------------------------------------------------------------ animation
 
         void LateUpdate()
@@ -450,6 +579,15 @@ namespace StoreManager
             if (cane != null) aR = Quaternion.Euler(-14f + s * 10f * walk, 0f, 6f);
             if (bag != null && bag.parent == shoulderR) aR = Quaternion.Euler(s * armAmp * 0.4f, 0f, 9f);
             if (bag != null && bag.parent == shoulderL) aL = Quaternion.Euler(-s * armAmp * 0.4f, 0f, -9f);
+            bool carrying = cases != null && !casesDown;
+            carryBlend = Mathf.MoveTowards(carryBlend, carrying ? 1f : 0f, dt * 6f);
+            if (carryBlend > 0f)
+            {
+                // Both hands under the sides of the case, held against the stomach.
+                aL = Quaternion.Slerp(aL, Quaternion.Euler(-58f + bob * 60f, 0f, 8f), carryBlend);
+                aR = Quaternion.Slerp(aR, Quaternion.Euler(-58f + bob * 60f, 0f, -8f), carryBlend);
+                lean -= 3f * carryBlend;
+            }
 
             float headX = -hunch * 0.7f, headY = 0f;
             if (pose > 0f)
@@ -483,7 +621,7 @@ namespace StoreManager
                         pR = Quaternion.Euler(-48f - w * 4f, 0f, -6f);
                         break;
                 }
-                if (hold == Hold.Trolley && shownPose != Pose.Reach) { pL = aL; pR = aR; }
+                if ((hold == Hold.Trolley && shownPose != Pose.Reach) || carrying) { pL = aL; pR = aR; }
                 aL = Quaternion.Slerp(aL, pL, pose);
                 aR = Quaternion.Slerp(aR, pR, pose);
             }

@@ -165,6 +165,10 @@ floor is placed by you, from the **office desk** (Build tab):
   more profit per item but fewer customers buy, and satisfaction drops.
 - Stock lives on the fixtures and in the **back room**. Stockers move it from
   the back to the emptiest shelves. Perishables age each night and expire.
+- You can see it happen: a stocker carries the cases out of the back room
+  (labelled in the department's colour), puts them down by the shelf and fills
+  it **one unit at a time**; empty cases go away, and whatever didn't fit is
+  carried back. (Roll cages for big loads come with the back-room models.)
 - **Ordering is a shopping cart** (Shop app): the catalogue lists every
   licensed product by supplier, with case size, case price, shelf life, stock
   (shelf, back room, on the way) and average daily sales. Add cases, then

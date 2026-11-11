@@ -120,14 +120,14 @@ namespace StoreManager
             {
                 var f = Fixtures[i];
                 if (f.Removed) continue;
-                w.Rec("fixture").S(f.Def.Id).I(f.Id).I(f.Origin.x).I(f.Origin.y).I(f.Rot).S(f.Product != null ? f.Product.Name : null).Pile(f.Stock);
+                w.Rec("fixture").S(f.Def.Id).I(f.Id).I(f.Origin.x).I(f.Origin.y).I(f.Rot).S(f.Product != null ? f.Product.Name : null).Pile(WithCarried(f.Stock, f.Product, f));
             }
             // After the fixtures: putting a product on its first shelf resets its par.
             for (int i = 0; i < Products.Count; i++)
             {
                 var p = Products[i];
                 w.Rec("product").S(p.Name).I(p.OnOrder).I(p.OnExpress).I(p.Par).I(p.SoldToday).I(p.MissedToday).I(p.PriceSkipsToday)
-                    .I(p.ExpiredFoundToday).I(p.BinnedToday).I(p.ExpiredLastNight).Pile(p.Back).I(p.SoldHistory.Count);
+                    .I(p.ExpiredFoundToday).I(p.BinnedToday).I(p.ExpiredLastNight).Pile(WithCarried(p.Back, p, null)).I(p.SoldHistory.Count);
                 for (int k = 0; k < p.SoldHistory.Count; k++) w.I(p.SoldHistory[k]);
             }
             for (int i = 0; i < Suppliers.Count; i++)
@@ -169,6 +169,31 @@ namespace StoreManager
             for (int i = 0; i < n; i++) { string k = r.S(); l.NotCarried[k] = r.I(); }
             n = r.I();
             for (int i = 0; i < n; i++) { string k = r.S(); l.SatisfactionLost[k] = r.F(); }
+        }
+
+        /// <summary>
+        /// Stock in someone's arms is saved where it would end up if they were interrupted: bakers' fresh
+        /// batches on the shelf they were filling, everything else back in the stock room.
+        /// </summary>
+        StockPile WithCarried(StockPile pile, Product p, Fixture f)
+        {
+            if (p == null) return pile;
+            StockPile all = null;
+            for (int i = 0; i < Staff.All.Count; i++)
+            {
+                var e = Staff.All[i];
+                if (e == null || e.CarryingProduct != p) continue;
+                bool toShelf = p.Baked && e.Claimed != null && !e.Claimed.Removed && e.Claimed.Product == p;
+                if (f != null ? !(toShelf && e.Claimed == f) : p.Baked) continue;
+                if (all == null)
+                {
+                    all = new StockPile();
+                    for (int b = 0; b < pile.Batches.Count; b++) all.Add(pile.Batches[b].Qty, pile.Batches[b].DaysLeft);
+                }
+                var c = e.Carrying;
+                for (int b = 0; b < c.Batches.Count; b++) all.Add(c.Batches[b].Qty, c.Batches[b].DaysLeft);
+            }
+            return all ?? pile;
         }
 
         static void WriteEmployee(Writer w, Employee e)
