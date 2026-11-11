@@ -7,7 +7,7 @@ namespace StoreManager
 {
     public enum GameKey
     {
-        W, A, S, D, Q, E, R, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4
+        W, A, S, D, Q, E, R, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4, F5, F9
     }
 
     /// <summary>
@@ -34,6 +34,8 @@ namespace StoreManager
                 case GameKey.Alpha1: return Key.Digit1;
                 case GameKey.Alpha2: return Key.Digit2;
                 case GameKey.Alpha3: return Key.Digit3;
+                case GameKey.F5: return Key.F5;
+                case GameKey.F9: return Key.F9;
                 default: return Key.Digit4;
             }
         }
@@ -86,6 +88,8 @@ namespace StoreManager
                 case GameKey.Alpha1: return KeyCode.Alpha1;
                 case GameKey.Alpha2: return KeyCode.Alpha2;
                 case GameKey.Alpha3: return KeyCode.Alpha3;
+                case GameKey.F5: return KeyCode.F5;
+                case GameKey.F9: return KeyCode.F9;
                 default: return KeyCode.Alpha4;
             }
         }

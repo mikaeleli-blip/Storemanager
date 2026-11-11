@@ -6,7 +6,10 @@ namespace StoreManager
     public static class Bootstrap
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        static void Boot()
+        static void Boot() { Start(); }
+
+        /// <summary>Creates the store (also used by GameSession for a new or loaded game).</summary>
+        public static void Start()
         {
             if (Object.FindAnyObjectByType<Store>() != null) return;
             var go = new GameObject("Storemanager");

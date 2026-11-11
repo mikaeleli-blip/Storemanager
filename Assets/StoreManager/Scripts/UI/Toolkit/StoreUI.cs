@@ -23,6 +23,12 @@ namespace StoreManager
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
         {
+            GameSession.Booted += Create;   // a new or loaded game starts in a fresh scene
+            Create();
+        }
+
+        static void Create()
+        {
             if (I != null) return;
             new GameObject("Store UI").AddComponent<StoreUI>();
         }

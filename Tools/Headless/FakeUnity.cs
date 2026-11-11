@@ -8,7 +8,14 @@ using System.Reflection;
 namespace UnityEngine
 {
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
-    public enum KeyCode { None, W, A, S, D, Q, E, R, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4 }
+    public enum KeyCode { None, W, A, S, D, Q, E, R, Tab, Space, Escape, Alpha1, Alpha2, Alpha3, Alpha4, F5, F9 }
+
+    public static class Application
+    {
+        public static string persistentDataPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "storemanager-headless");
+    }
+
+    public class AsyncOperation { public event System.Action<AsyncOperation> completed; internal void Done() { if (completed != null) completed(this); } }
     public enum CameraClearFlags { Skybox = 1, SolidColor = 2, Depth = 3, Nothing = 4 }
     public enum LightType { Spot, Directional, Point }
     public enum LightShadows { None, Hard, Soft }
@@ -794,6 +801,29 @@ namespace UnityEngine
         }
 
         public static int BehaviourCount { get { return behaviours.Count; } }
+
+        /// <summary>Destroys every object right away (a scene unload).</summary>
+        public static void DestroyAll()
+        {
+            foreach (var go in AllObjects.ToArray()) if (!go.destroyed && go.transform.parent == null) DestroyGameObject(go);
+            foreach (var go in AllObjects.ToArray()) if (!go.destroyed) DestroyGameObject(go);
+            PendingDestroy.Clear();
+        }
+    }
+}
+
+namespace UnityEngine.SceneManagement
+{
+    public struct Scene { public string name; }
+
+    public static class SceneManager
+    {
+        static Scene active = new Scene { name = "Headless" };
+        public static Scene GetActiveScene() { return active; }
+        public static Scene CreateScene(string name) { return new Scene { name = name }; }
+        public static bool SetActiveScene(Scene s) { active = s; return true; }
+        /// <summary>Headless: unloads at once and returns null (the caller boots straight away).</summary>
+        public static UnityEngine.AsyncOperation UnloadSceneAsync(Scene s) { UnityEngine.Engine.DestroyAll(); return null; }
     }
 }
 

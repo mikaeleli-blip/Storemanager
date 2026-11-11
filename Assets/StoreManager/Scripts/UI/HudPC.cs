@@ -9,25 +9,26 @@ namespace StoreManager
     /// </summary>
     public partial class Hud
     {
-        public enum App { Shop, Bills, Products, Licences, Staff, Roster, Hiring, Assistant, Stats, Expansion, Inbox }
-        public const int AppCount = 11;
-        static readonly string[] AppNames = { "Shop", "Bills", "Products", "Licences", "Staff", "Roster", "Hiring", "Assistant", "Stats", "Expansion", "Inbox" };
+        public enum App { Shop, Bills, Products, Licences, Staff, Roster, Hiring, Assistant, Stats, Expansion, Inbox, Saves }
+        public const int AppCount = 12;
+        static readonly string[] AppNames = { "Shop", "Bills", "Products", "Licences", "Staff", "Roster", "Hiring", "Assistant", "Stats", "Expansion", "Inbox", "Saves" };
         static readonly string[] AppTitles =
         {
             "Ordering: warehouse and suppliers", "Bills (reikningar)", "Products & prices", "Licences", "Staff: profiles, reviews, discipline",
             "Roster (vaktaplan)", "Hiring and interviews", "Assistant manager", "Statistics", "Expansion", "Inbox",
+            "Save, load and new game",
         };
         static readonly Color[] AppColors =
         {
             Mats.Hex("#2f9e6a"), Mats.Hex("#a8432f"), Mats.Hex("#d08a2c"), Mats.Hex("#b8913a"), Mats.Hex("#3f7fd0"), Mats.Hex("#3a9a8c"), Mats.Hex("#6a5acd"),
-            Mats.Hex("#c0566b"), Mats.Hex("#2a9db0"), Mats.Hex("#7a8a3a"), Mats.Hex("#5d6b7d"),
+            Mats.Hex("#c0566b"), Mats.Hex("#2a9db0"), Mats.Hex("#7a8a3a"), Mats.Hex("#5d6b7d"), Mats.Hex("#45607a"),
         };
         static readonly Color BuildColor = Mats.Hex("#d9573b");
         static readonly Vector2[] AppSizes =
         {
             new Vector2(1100f, 740f), new Vector2(1000f, 680f), new Vector2(1000f, 680f), new Vector2(1020f, 660f), new Vector2(1140f, 720f),
             new Vector2(1020f, 720f), new Vector2(1140f, 740f), new Vector2(720f, 460f), new Vector2(980f, 660f), new Vector2(640f, 340f),
-            new Vector2(720f, 560f),
+            new Vector2(720f, 560f), new Vector2(820f, 470f),
         };
 
         class PcWindow
@@ -145,6 +146,8 @@ namespace StoreManager
                     "#####..#....", "............", "############", "#++++++++++#", "#++#++#++#+#", "############" },
             new[] { "............", "............", "############", "##++++++++##", "#+#++++++#+#", "#++#++++#++#",
                     "#+++####+++#", "#++++++++++#", "#++++++++++#", "############", "............", "............" },
+            new[] { "###########.", "#++#....#++#", "#++#....#++#", "#++#..o.#++#", "#++######++#", "#++++++++++#",
+                    "#+oooooooo+#", "#+o......o+#", "#+o......o+#", "#+o......o+#", "#+oooooooo+#", "############" },
         };
         static readonly string[] BuildArt =
         {
@@ -509,6 +512,7 @@ namespace StoreManager
                     case App.Assistant: DelegationTab(); break;
                     case App.Stats: if (statsPage == 0) OverviewTab(); else FinancesTab(); break;
                     case App.Expansion: ExpansionTab(); break;
+                    case App.Saves: SavesApp(); break;
                     default: InboxApp(); break;
                 }
                 GUILayout.EndScrollView();
@@ -778,6 +782,93 @@ namespace StoreManager
                 }
                 GUILayout.EndVertical();
             }
+        }
+
+        // ------------------------------------------------------------------ save, load, new game
+
+        string sessionConfirm;   // "new" or a slot to load
+        readonly Dictionary<string, string> slotSummary = new Dictionary<string, string>();
+        readonly Dictionary<string, string> slotTime = new Dictionary<string, string>();
+        float slotsRead = -99f;
+
+        void RefreshSlots()
+        {
+            slotsRead = Time.unscaledTime;
+            foreach (var s in GameSession.Slots)
+            {
+                slotSummary[s] = GameSession.Summary(s);
+                slotTime[s] = GameSession.SavedAt(s);
+            }
+        }
+
+        public void SaveTo(string slot)
+        {
+            string why = GameSession.Save(slot);
+            Toast(why ?? "Saved: " + GameSession.SlotName(slot) + ".");
+            slotsRead = -99f;
+        }
+
+        void SavesApp()
+        {
+            if (Time.unscaledTime - slotsRead > 2f) RefreshSlots();
+            GUILayout.Label("Save and load", header);
+            GUILayout.Label("A save keeps everything: stock and sell-by dates, staff and their records, rosters, bills, orders and money. "
+                + "Customers in the store and spills don't carry over. The game also saves itself every night at midnight.", small);
+            GUILayout.Space(8f);
+            foreach (var slot in GameSession.Slots)
+            {
+                string sum;
+                slotSummary.TryGetValue(slot, out sum);
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("<b>" + GameSession.SlotName(slot) + "</b>", rich, W(200));
+                GUILayout.Label(sum != null ? sum + "   <color=#8a96a3>" + slotTime[slot] + "</color>" : "<color=#8a96a3>empty</color>", rich);
+                GUILayout.FlexibleSpace();
+                if (slot != GameSession.Auto)
+                {
+                    GUI.enabled = store.StartChosen;
+                    if (GUILayout.Button("Save", W(70))) SaveTo(slot);
+                }
+                else GUILayout.Space(74f);
+                GUI.enabled = sum != null;
+                if (GUILayout.Button("Load", W(70))) sessionConfirm = slot;
+                GUI.enabled = true;
+                GUILayout.EndHorizontal();
+                GUILayout.Space(2f);
+            }
+            GUILayout.Space(10f);
+            if (sessionConfirm == null)
+            {
+                if (GUILayout.Button("New game", W(160))) sessionConfirm = "new";
+            }
+            else
+            {
+                string what = sessionConfirm == "new" ? "Start a new game?" : "Load " + GameSession.SlotName(sessionConfirm) + "?";
+                GUILayout.Label("<color=#ffd24d><b>" + what + "</b> Anything you haven't saved is lost.</color>", rich);
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(sessionConfirm == "new" ? "Yes, start over" : "Yes, load it", W(160)))
+                {
+                    string slot = sessionConfirm;
+                    sessionConfirm = null;
+                    pendingSession = slot;
+                }
+                if (GUILayout.Button("Cancel", W(100))) sessionConfirm = null;
+                GUILayout.EndHorizontal();
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.Label("Saves folder: " + GameSession.Folder, small);
+        }
+
+        /// <summary>A load or new game picked in the Saves app; done in Update, outside the GUI pass.</summary>
+        string pendingSession;
+
+        void RunPendingSession()
+        {
+            if (pendingSession == null) return;
+            string slot = pendingSession;
+            pendingSession = null;
+            if (slot == "new") { GameSession.NewGame(); return; }
+            string why = GameSession.Load(slot);
+            if (why != null) Toast(why);
         }
 
         void InboxApp()

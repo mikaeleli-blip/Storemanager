@@ -325,6 +325,33 @@ namespace StoreManager
             return e;
         }
 
+        /// <summary>Brings back a saved employee (off the clock; the caller fills in the rest of the record).</summary>
+        public Employee Restore(Applicant a, Role role, Contract contract, Category category, float wage)
+        {
+            var go = new GameObject("Staff " + a.Name);
+            var e = go.AddComponent<Employee>();
+            e.DisplayName = a.Name;
+            e.Role = role;
+            e.Contract = contract;
+            e.AssignedCategory = role == Role.Stocker ? category : null;
+            e.Speed = a.Speed;
+            e.Service = a.Service;
+            e.Reliability = a.Reliability;
+            e.Leadership = a.Leadership;
+            e.WorkEthic = a.WorkEthic;
+            e.Ambition = a.Ambition;
+            e.Charm = a.Charm;
+            e.Specialty = a.Specialty;
+            e.NoNights = a.NoNights;
+            e.NoMornings = a.NoMornings;
+            e.NoWeekends = a.NoWeekends;
+            e.AskingWage = a.AskingWage;
+            e.Wage = wage;
+            All.Add(e);
+            go.SetActive(false);
+            return e;
+        }
+
         public void Remove(Employee e)
         {
             All.Remove(e);

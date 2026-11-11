@@ -55,12 +55,73 @@ public static class Runner
             Track();
             PrintLog();
         }
+        if (args.Length > 3 && args[3] == "savetest") SaveRoundTrip(dt, scripted, done);
         Console.WriteLine();
         if (overstock) foreach (var p in store.Products.Where(p => p.Carried && p.Life > 0))
             Console.WriteLine("   batches " + p.Name + " par " + p.Par + " back[" + string.Join(" ", p.Back.Batches.Select(b => b.Qty + "@" + b.DaysLeft))
                 + "] shelves[" + string.Join(" ", p.Fixtures.SelectMany(f => f.Stock.Batches).Select(b => b.Qty + "@" + b.DaysLeft)) + "] sold " + p.SoldToday);
         Console.WriteLine("Frames " + Engine.Frame + ", exceptions " + Engine.Errors + ", max customers at once " + maxCustomers);
         return Engine.Errors > 0 ? 1 : 0;
+    }
+
+    /// <summary>Saves, loads into a fresh game, saves again and compares; then plays on for two days.</summary>
+    static void SaveRoundTrip(float dt, bool scripted, HashSet<string> done)
+    {
+        // Save in the middle of a busy afternoon: customers in the store, staff on shift, stock moving.
+        int h = store.Clock.Hour;
+        while (store.Clock.Hour != 14)
+        {
+            Engine.Tick(dt);
+            if (store.Clock.Hour != h) { h = store.Clock.Hour; if (scripted) Script(store.Clock.Day, h, done); }
+        }
+        Console.WriteLine("   >> SAVE TEST at " + store.Clock.Weekday + " " + store.Clock.TimeText + ": " + store.Customers.Count + " customers in the store");
+        string a = store.WriteSave();
+        int employees = store.Staff.All.Count, fixtures = store.Fixtures.Count(f => !f.Removed);
+        string why = GameSession.LoadText(a);
+        if (why != null) { Console.WriteLine("   !! load failed: " + why); Engine.Errors++; return; }
+        store = Store.I;
+        born.Clear();
+        string b = store.WriteSave();
+        Engine.Tick(dt);
+        var la = a.Split('\n').Where(l => !l.StartsWith("log\t") && !l.StartsWith("clock\t")).Skip(1).ToList();
+        var lb = b.Split('\n').Where(l => !l.StartsWith("log\t") && !l.StartsWith("clock\t")).Skip(1).ToList();
+        int diffs = 0;
+        for (int i = 0; i < Math.Max(la.Count, lb.Count); i++)
+        {
+            string x = i < la.Count ? la[i] : "(none)", y = i < lb.Count ? lb[i] : "(none)";
+            if (x == y) continue;
+            if (diffs++ < 8) Console.WriteLine("   SAVE DIFF\n     before: " + x.Replace('\t', '|') + "\n     after:  " + y.Replace('\t', '|'));
+        }
+        Console.WriteLine("   >> SAVE TEST: " + a.Length + " chars, " + la.Count + " records, " + employees + " staff, " + fixtures
+            + " fixtures; after load " + store.Staff.All.Count + " staff, " + store.Fixtures.Count + " fixtures; " + diffs + " records differ");
+        if (diffs > 0) Engine.Errors++;
+        store.Clock.SetSpeed(3);
+        int end = store.Clock.Day + 2, lastDay = store.Clock.Day, lastHour = store.Clock.Hour;
+        while (store.Clock.Day <= end)
+        {
+            Engine.Tick(dt);
+            if (store.Clock.Hour != lastHour)
+            {
+                lastHour = store.Clock.Hour;
+                if (scripted) Script(store.Clock.Day, store.Clock.Hour, done);
+            }
+            if (store.Clock.Day != lastDay)
+            {
+                lastDay = store.Clock.Day;
+                PrintDay(store.Economy.History[store.Economy.History.Count - 1]);
+            }
+            Track();
+            PrintLog();
+        }
+
+        // And a new game from there: an empty shop waiting for you to choose how to start.
+        GameSession.NewGame();
+        store = Store.I;
+        born.Clear();
+        for (int i = 0; i < 60; i++) Engine.Tick(dt);
+        Console.WriteLine("   >> NEW GAME: day " + store.Clock.Day + ", " + store.Fixtures.Count + " fixtures, " + store.Staff.All.Count
+            + " staff, cash " + Economy.Money(store.Economy.Cash) + ", start chosen " + store.StartChosen);
+        if (store.Fixtures.Count != 0 || store.StartChosen) Engine.Errors++;
     }
 
     static Fixture Place(string id, int x, int z, int rot = 0, string product = null)

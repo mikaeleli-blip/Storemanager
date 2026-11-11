@@ -63,7 +63,7 @@ namespace StoreManager
             if (I == null || string.IsNullOrEmpty(text)) return;
             I.toast = text;
             I.toastTime = 3f;
-            I.store.Message(text);
+            if (Store.I != null) Store.I.Message(text);
         }
 
         // ------------------------------------------------------------------ input
@@ -84,6 +84,13 @@ namespace StoreManager
             if (Selected != null && Selected.Leaving) Selected = null;
 
             if (GameInput.Down(GameKey.Escape)) HandleEscape();
+            if (GameInput.Down(GameKey.F5) && store.StartChosen) SaveTo(GameSession.Quick);
+            if (GameInput.Down(GameKey.F9))
+            {
+                if (GameSession.Summary(GameSession.Quick) == null) Toast("No quick save yet (F5 saves).");
+                else pendingSession = GameSession.Quick;
+            }
+            RunPendingSession();
             if (store.Avatar.AtDesk && !OnPC && !BuildMode.I.Active) BuildMode.I.Open();
             if (!pc) HandleWorldClicks();
 

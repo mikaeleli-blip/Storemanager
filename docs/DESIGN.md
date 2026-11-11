@@ -357,6 +357,22 @@ store (staff near them work 5% faster) and do the jobs you delegate:
   faster (can be turned off).
 - No save system yet: playtests in Unity, where pausing serves as a save.
 
+
+## Saving and loading
+
+- **Saves app** on the office computer: a quick-save slot (also **F5**, load with **F9**), three manual
+  slots, and an **autosave every night at midnight**. Also **New game** (asks first).
+- A save keeps everything that matters: clock, money and the last 60 days of books, licences and level, the
+  building and every fixture with its product and stock (with sell-by dates), the back room, orders,
+  suppliers and bills, the order cart, all staff (contracts, rosters, records, warnings, what you know about
+  them), applicants and interviews, and the journal.
+- Customers in the store and spills don't carry over. Staff who were at work when you saved carry on with
+  their shift. Loaded games start paused.
+- Files are plain text in `Application.persistentDataPath/Saves`. Loading or a new game swaps in a fresh
+  scene, so nothing from the old store is left behind.
+- Test: `Tools/Headless/run.sh 30 scripted 11 savetest` saves mid-afternoon, loads into a fresh game, saves
+  again and checks both saves match record for record, plays on two days, then starts a new game.
+
 ## Roadmap
 
 1. **First slice (this build):** build mode with free placement, one product

@@ -415,7 +415,6 @@ namespace StoreManager
 
         void OnNewDay()
         {
-            var today = Economy.Today;
             for (int i = 0; i < Products.Count; i++)
             {
                 var p = Products[i];
@@ -442,7 +441,15 @@ namespace StoreManager
             BillsNightly();
             Staff.RefreshApplicants(false);
             if (Economy.Cash < 0f) Message("Warning: the store is in the red.");
+            if (StartChosen && AutoSave)
+            {
+                string why = GameSession.Save(GameSession.Auto);
+                if (why != null) Message(why);
+            }
         }
+
+        /// <summary>Save the game every night at midnight (off in some headless tests).</summary>
+        public static bool AutoSave = true;
 
         // ------------------------------------------------------------------ licences and levels
 
