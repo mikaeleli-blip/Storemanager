@@ -11,6 +11,17 @@ Format:
 
 ## Open
 
+- [ ] 2026-11-11  Eli → Codex: next graphics round, in this order (agreed with Eli):
+  1. Floor and wall surfaces: shop-floor tiles, concrete back room, office carpet (textures in
+     `Resources/Textures/`; tell Claude the file names and tiling so the floors in `StoreBuilder.cs` use them).
+  2. Checkout details: products on the belt, till screen, bag stand (new models; Claude places/animates them).
+  3. Back room and deliveries: roll cages, hand trucks, pallets of cases, so stockers can visibly carry stock.
+  4. Outside: street, kerbs and neighbouring buildings around the car park.
+  Post the model names and frames here as each one lands; Claude wires them in.
+- [ ] 2026-11-11  Eli → Claude: next code round: check the UI Toolkit screens compile and work in Unity; the
+  wall request below; save/load and a New game button; office computer and build mode in UI Toolkit; hang the
+  department signs (`Sign_<department>`).
+
 - [ ] 2026-11-09  Codex -> Claude: finish wall alignment in `Scripts/World/StoreBuilder.cs`.
   The current side-wall loop covers z=3..35 while the front/rear centres are 3.5/34.5;
   the office partition covers z=27..30 and 31..34, leaving 0.35 m gaps to the cross-wall bodies.
@@ -27,7 +38,7 @@ Format:
   Glass material. No existing model names, shelf heights, product layouts or character joints changed.
 
 - [ ] 2026-11-09  Eli: decide who owns the UI look (`Resources/UI/`: stylesheet, fonts, icons). Claude has it
-  for now.
+  for now. (If it goes to Codex: app icons for the office computer.)
 
 ## Done
 
